@@ -1,0 +1,37 @@
+* langchain
+* FastAPI
+* ChromaDB
+* SSR w. jinja2
+
+##### Architecture
+
+- **`ingestor`**: Handles reading files (PDF/EPUB), cleaning text, and chunking
+- **`storage`**: Manages the Vector Database (ChromaDB).
+- **`engine`**: The RAG logic (Embed Query -> Retrieve -> Generate Answer)
+- **`web`**: The FastAPI UI layer (Routes + HTML Templates).
+
+
+```
+ai-librarian/
+├── data/               # stores vector DB and uploaded files
+├── templates/          # HTML files (Jinja2)
+├── static/             # .scss and .css files
+├── src/
+│   ├── __init__.py
+│   ├── config.py       # general config params
+│   ├── ingest.py       # loaders & splitters
+│   ├── vector.py       # database interface
+│   ├── rag.py          # actual rag/llm
+│   └── app.py          # webserver
+└── requirements.txt
+```
+
+
+* make sure ollama is enabled *`sudo systemctl start ollamaollama pull llama3.2`
+* pull model `ollama pull llama3.2`
+* start Ollama: `ollama run llama3.2` (or whichever model you configured)
+* run the server: `python -m src.app`
+- go to `http://localhost:8000`
+
+#### TODO
+include `metadata.py`
