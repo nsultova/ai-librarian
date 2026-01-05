@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>My Private Library</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Private Library RAG</h1>
+        
+        <div class="card">
+            <form action="/search" method="post" class="search-form">
+                <input type="text" name="query" placeholder="Ask your library..." required value="{{ query or '' }}">
+                <button type="submit">Ask</button>
+            </form>
+        </div>
+
+        {% if answer %}
+        <div class="result-section">
+            <h2>Answer:</h2>
+            <div class="answer-box">
+                {{ answer }}
+            </div>
+            <div class="sources">
+                <small>Sources: {{ sources|join(', ') }}</small>
+            </div>
+        </div>
+        {% endif %}
+
+        <hr>
+
+        <div class="upload-section">
+            <h3>Add to Library</h3>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".pdf,.epub">
+                <button type="submit" class="secondary">Ingest Document</button>
+            </form>
+            {% if message %}
+                <p class="success">{{ message }}</p>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
