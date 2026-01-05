@@ -1,3 +1,9 @@
+
+##### Disclaimer
+
+This is, for now, a mere POC to understand RAGs better. I want to turn it into sth proper tho, as I could actually use such a tool pretty much.
+
+###### Techstack
 * langchain
 * FastAPI
 * ChromaDB
