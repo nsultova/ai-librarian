@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+python-multipart
+jinja2
+chromadb
+langchain-community
+langchain-huggingface
+langchain-ollama
+pypdf
+ebooklib
+bs4
+sentence-transformers
+unstructured
