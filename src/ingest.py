@@ -15,7 +15,7 @@ def clean_txt(txt:str) -> str:
     txt = re.sub(r'\s+', ' ', txt)
     return txt.strip()
 
-def chunk_file(file_path:str) -> str:
+def chunk_file(file_path:str) -> List[Document]:
     
     file_ext = file_path.split('.')[-1].lower()
     
