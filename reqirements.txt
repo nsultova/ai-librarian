@@ -4,6 +4,7 @@ python-multipart
 jinja2
 chromadb
 langchain-community
+langchain-chroma
 langchain-huggingface
 langchain-ollama
 pypdf
