@@ -1,5 +1,6 @@
+// don't forget to compile: sass style.scss style.css
 
-// compile with: sassc static/style.scss static/style.css
+@use 'sass:color';
 
 $font-stack: 'Helvetica Neue', 'Segoe UI', Helvetica, Arial, sans-serif;
 $primary-color: #2c3e50;    // Deep Navy
@@ -48,7 +49,6 @@ body {
   }
 }
 
-
 .search-form {
   display: flex;
   gap: 10px;
@@ -69,7 +69,6 @@ body {
     }
   }
 }
-
 
 button {
   padding: 12px 24px;
@@ -110,12 +109,14 @@ button {
   }
 
   .answer-box {
-    background: lighten($bg-color, 1%);
+    // FIX 1: Use color.adjust
+    background: color.adjust($bg-color, $lightness: 1%); 
     padding: 1.5rem;
     border-left: 4px solid $primary-color;
     border-radius: 4px;
     font-size: 1.05rem;
-    color: lighten($text-color, 10%);
+    // FIX 2: Use color.adjust
+    color: color.adjust($text-color, $lightness: 10%);
   }
 
   .sources {
@@ -160,7 +161,6 @@ button {
   font-weight: 500;
   text-align: center;
 }
-
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
