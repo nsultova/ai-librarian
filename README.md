@@ -57,3 +57,9 @@ Setup uv (a nice tool to handle .venvs):
 * improve UI
 * build proper design?
 * make actually useful
+
+
+##### MODELS USED
+
+Embedding: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
+LLM: https://huggingface.co/meta-llama/Llama-3.2-1B

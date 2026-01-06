@@ -4,7 +4,6 @@ from langchain_community.document_loaders import PyPDFLoader, UnstructuredEPubLo
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
-# IMPORT THE NEW MODULE
 #from src.metadata import get_file_metadata
 
 def clean_txt(txt:str) -> str:
