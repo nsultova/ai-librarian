@@ -32,12 +32,28 @@ ai-librarian/
 └── requirements.txt
 ```
 
+#### For Archlinux
 
-* make sure ollama is enabled *`sudo systemctl start ollamaollama pull llama3.2`
-* pull model `ollama pull llama3.2`
+Setup uv (a nice tool to handle .venvs):
+`uv venv ai-librarian-env`
+`source ./ai-librarian-env/bin/activate`
+`uv pip install -r reqirements.txt`
+
+**Note:** Install ollama systemwide
+`sudo pacman -S ollama`
+
+* make sure ollama is enabled `sudo systemctl start ollama`
+* grab the model `ollama pull llama3.2`
 * start Ollama: `ollama run llama3.2` (or whichever model you configured)
 * run the server: `python -m src.app`
-- go to `http://localhost:8000`
+* go to `http://localhost:8000`
 
 #### TODO
-include `metadata.py`
+* include `metadata.py`
+* refine metadata
+* ingest multiple formats
+* add multimodality
+* try with quicker models
+* improve UI
+* build proper design?
+* make actually useful
