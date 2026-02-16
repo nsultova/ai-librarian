@@ -14,7 +14,8 @@ os.makedirs(DB_DIR, exist_ok=True)
 
 # Model Configuration
 # Embedding: NVIDIA's flagship model for high-quality semantic search
-EMBEDDING_MODEL_NAME = "nvidia/NV-Embed-v2"
+# EMBEDDING_MODEL_NAME = "nvidia/llama-embed-nemotron-8b"
+EMBEDDING_MODEL_NAME = "intfloat/e5-small-v2"  # Only 120MB!
 
 # LLM: Mistral 7B via Ollama - balanced performance for local deployment
 LLM_MODEL = "mistral:7b"
