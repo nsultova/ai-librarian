@@ -48,15 +48,19 @@ Setup uv (a nice tool to handle .venvs):
 * run the server: `python -m src.app`
 * go to `http://localhost:8000`
 
+
 #### TODO
 * include `metadata.py`
 * refine metadata
 * ingest multiple formats
-* add multimodality
 * try with quicker models
+* improve retrieval itself
 * improve UI
 * build proper design?
 * make actually useful
+* list/show ingested books
+* backup database 
+* add multimodality
 
 
 ##### MODELS USED
