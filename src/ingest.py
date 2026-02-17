@@ -3,6 +3,7 @@ from typing import List
 from langchain_community.document_loaders import PyPDFLoader, UnstructuredEPubLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
+from src.config import CHUNK_SIZE, CHUNK_OVERLAP
 
 #from src.metadata import get_file_metadata
 
@@ -40,8 +41,8 @@ def chunk_file(file_path:str) -> List[Document]:
         
     # chunkchunk
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200, # overlap ensures context isn't lost at cut-offs
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP, # overlap ensures context isn't lost at cut-offs
         separators=["\n\n", "\n", ". ", " ", ""]
     )
     
