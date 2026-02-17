@@ -4,6 +4,8 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from src.config import DB_DIR, EMBEDDING_MODEL_NAME
 import logging
+from functools import lru_cache
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +18,7 @@ logger = logging.getLogger(__name__)
 #         embedding_function=embedding_function
 #     )
 
-
+@lru_cache(maxsize=1) # mitigate double-retrieval/initialization of embedding model on every call
 def get_vector_db() -> Chroma:
     """
     Get or create the ChromaDB vector database.
