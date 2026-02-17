@@ -49,6 +49,56 @@ def test_embedding_model():
         import traceback
         traceback.print_exc()
         return False
+    
+    
+def test_rag_pipeline():
+    print("=" * 60)
+    print("TESTING RAG PIPELINE")
+    print("=" * 60)
+
+    try:
+        from langchain_ollama import ChatOllama
+        from langchain_core.prompts import ChatPromptTemplate
+        from langchain_core.output_parsers import StrOutputParser
+        from config import LLM_MODEL
+        from rag import PROMPT_TEMPLATE
+
+        # 1. check prompt template renders correctly
+        print("\nChecking prompt template...")
+        prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
+        rendered = prompt.format(
+            context="The sky is blue because of Rayleigh scattering.",
+            question="Why is the sky blue?"
+        )
+        assert "{context}" not in rendered, "context variable was not injected"
+        assert "{question}" not in rendered, "question variable was not injected"
+        print("Prompt template renders correctly")
+
+        # 2. check ollama is reachable and responds
+        print(f"\nCalling Ollama with model: {LLM_MODEL}")
+        llm = ChatOllama(model=LLM_MODEL)
+        chain = prompt | llm | StrOutputParser()
+        answer = chain.invoke({
+            "context": "The sky is blue because of Rayleigh scattering.",
+            "question": "Why is the sky blue?"
+        })
+
+        assert isinstance(answer, str), "answer is not a string"
+        assert len(answer.strip()) > 0, "answer is empty"
+
+        print(f"Response received ({len(answer)} chars)")
+        print(f"Preview: {answer[:200]}")
+        print("\nRAG PIPELINE TEST PASSED")
+        return True
+
+    except ConnectionRefusedError:
+        print("\nFAILED: Ollama is not running. Start it with: ollama serve")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def main():
@@ -57,7 +107,8 @@ def main():
     print("="*60)
     
     results = {
-        "Embedding Model": test_embedding_model()
+        "Embedding Model": test_embedding_model(),
+        "RAG Pipeline": test_rag_pipeline()
     }
 
 if __name__ == "__main__":
