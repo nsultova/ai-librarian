@@ -49,6 +49,13 @@ Setup uv (a nice tool to handle .venvs):
 * go to `http://localhost:8000`
 
 
+#### Tests
+
+python src/test_models.py — runs all tests
+python src/test_models.py embedding — runs only embedding
+python src/test_models.py rag — runs only RAG
+
+
 #### TODO
 * include `metadata.py`
 * refine metadata
