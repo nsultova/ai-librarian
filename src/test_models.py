@@ -1,8 +1,10 @@
 import sys
 from pathlib import Path
+import argparse
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
+
 
 def test_embedding_model():
     """Test if embedding model loads and generates embeddings."""
@@ -101,15 +103,38 @@ def test_rag_pipeline():
         return False
 
 
+TESTS = {
+    "embedding": test_embedding_model,
+    "rag": test_rag_pipeline,
+}
+
+
 def main():
-    print("\n" + "="*60)
+    parser = argparse.ArgumentParser(description="AI Librarian model tests")
+    parser.add_argument(
+        "tests",
+        nargs="*",
+        choices=list(TESTS.keys()),
+        help=f"Tests to run. Available: {', '.join(TESTS.keys())}. Runs all if omitted."
+    )
+    args = parser.parse_args()
+
+    to_run = {name: TESTS[name] for name in (args.tests or TESTS.keys())}
+
+    print("\n" + "=" * 60)
     print("AI LIBRARIAN MODEL VERIFICATION")
-    print("="*60)
-    
-    results = {
-        "Embedding Model": test_embedding_model(),
-        "RAG Pipeline": test_rag_pipeline()
-    }
+    print("=" * 60)
+
+    results = {name: fn() for name, fn in to_run.items()}
+
+    print("\n" + "=" * 60)
+    print("RESULTS")
+    print("=" * 60)
+    for name, passed in results.items():
+        status = "PASSED" if passed else "FAILED"
+        print(f"  {name}: {status}")
+
+    sys.exit(0 if all(results.values()) else 1)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()
