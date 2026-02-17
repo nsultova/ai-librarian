@@ -49,11 +49,15 @@ Setup uv (a nice tool to handle .venvs):
 * go to `http://localhost:8000`
 
 
-#### Tests
 
-python src/test_models.py — runs all tests
-python src/test_models.py embedding — runs only embedding
-python src/test_models.py rag — runs only RAG
+#### RUN
+
+Always from the project root (`ai-librarian/`), never from inside `src/`:
+`
+python -m src.app          # run the server
+python -m src.test_models  # run all tests
+python -m src.test_models rag  # run one test
+
 
 
 #### TODO

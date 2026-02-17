@@ -1,9 +1,8 @@
 import sys
 from pathlib import Path
 import argparse
-
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+from src.config import LLM_MODEL
+from src.rag import PROMPT_TEMPLATE
 
 
 def test_embedding_model():
@@ -14,7 +13,7 @@ def test_embedding_model():
     
     try:
         from langchain_huggingface import HuggingFaceEmbeddings
-        from config import EMBEDDING_MODEL_NAME
+        from src.config import EMBEDDING_MODEL_NAME
         
         print(f"\nModel: {EMBEDDING_MODEL_NAME}")
         print("Loading model (this may take a while on first run)...")
@@ -62,8 +61,8 @@ def test_rag_pipeline():
         from langchain_ollama import ChatOllama
         from langchain_core.prompts import ChatPromptTemplate
         from langchain_core.output_parsers import StrOutputParser
-        from config import LLM_MODEL
-        from rag import PROMPT_TEMPLATE
+        from src.config import LLM_MODEL
+        from src.rag import PROMPT_TEMPLATE
 
         # 1. check prompt template renders correctly
         print("\nChecking prompt template...")
