@@ -4,8 +4,12 @@ from langchain_community.document_loaders import PyPDFLoader, UnstructuredEPubLo
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from src.config import CHUNK_SIZE, CHUNK_OVERLAP
+from src.metadata import get_file_metadata
+import logging
 
-#from src.metadata import get_file_metadata
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 
 def clean_txt(txt:str) -> str:
     
@@ -30,13 +34,17 @@ def chunk_file(file_path:str) -> List[Document]:
     
     # meta_info = get_file_metadata(file_path)
     # print(f"Detected Metadata: {meta_info}")
-    
+        # Extract metadata once per file
+    file_metadata = get_file_metadata(file_path)
+    logger.info(f"Extracted metadata: {file_metadata}")
     
     # clean
-    for doc in raw_docs:
+    for idx, doc in enumerate(raw_docs):
         doc.page_content = clean_txt(doc.page_content)
+        doc.metadata.update(file_metadata)
+        doc.metadata['chunk_index'] = idx  # Track position
         # metadata for later retrieval visibility
-        doc.metadata['source'] = file_path.split('/')[-1]
+        # doc.metadata['source'] = file_path.split('/')[-1]
         # doc.metadata.update(meta_info)
         
     # chunkchunk

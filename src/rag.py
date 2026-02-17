@@ -1,4 +1,4 @@
-from typing import List, Tuple, Set
+from typing import List, Tuple, Dict, Any, Optional
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
@@ -17,14 +17,37 @@ If you cannot find the answer in the context, say "I couldn't find that in your 
 Answer concisely and cite relevant details from the context where useful.
 """
 
-# rag.py — single retrieval pass
-def query_library(question: str) -> Tuple[str, List[str]]:
-    db = get_vector_db()  # retrieve once
-    retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": RETRIEVAL_K})
+# # rag.py — single retrieval pass
+# def query_library(question: str) -> Tuple[str, List[str]]:
+#     db = get_vector_db()  # retrieve once
+#     retriever = db.as_retriever(search_type="similarity", search_kwargs={"k": RETRIEVAL_K})
+    
+#     docs: List[Document] = retriever.invoke(question)
+#     context = "\n\n".join(doc.page_content for doc in docs)
+#     sources = list({d.metadata.get("source", "Unknown") for d in docs})
+def query_library(question: str, filters: Optional[Dict[str, Any]] = None) -> Tuple[str, List[str]]:
+    db = get_vector_db()
+    
+    search_kwargs: Dict[str, Any] = {"k": RETRIEVAL_K}
+    if filters:
+        search_kwargs["filter"] = filters
+    
+    retriever = db.as_retriever(
+        search_type="similarity",
+        search_kwargs=search_kwargs
+    )
     
     docs: List[Document] = retriever.invoke(question)
-    context = "\n\n".join(doc.page_content for doc in docs)
-    sources = list({d.metadata.get("source", "Unknown") for d in docs})
+    
+    # Enhanced context with metadata
+    context_parts = []
+    for doc in docs:
+        meta = doc.metadata
+        source_info = f"[{meta.get('title', 'Unknown')} by {meta.get('author', 'Unknown')}]"
+        context_parts.append(f"{source_info}\n{doc.page_content}")
+    
+    context = "\n\n".join(context_parts)
+    sources = list({f"{d.metadata.get('title', 'Unknown')} by {d.metadata.get('author', 'Unknown')}" for d in docs})
     
     prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
     llm = ChatOllama(model=LLM_MODEL)

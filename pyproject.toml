@@ -20,4 +20,5 @@ dependencies = [
     "sentence-transformers",
     "unstructured",
     "libsass",
+    "pypdf2>=3.0.1",
 ]
