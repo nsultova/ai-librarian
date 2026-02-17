@@ -21,20 +21,27 @@ async def home(request: Request):
 
 @app.post("/upload", response_class=HTMLResponse)
 async def upload_file(request: Request, file: UploadFile = File(...)):
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="File must have a filename")
-        
-    file_location = UPLOAD_DIR / file.filename
     
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+    
+    # 1. sanitize and validate first — before touching the filesystem
+    safe_name = Path(file.filename).name
+    if not safe_name.endswith((".pdf", ".epub")):
+        raise HTTPException(status_code=400, detail="Only PDF and EPUB files are supported")
+    
+    # 2. now safe to construct the path and write
+    file_location = UPLOAD_DIR / safe_name
     with open(file_location, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # 3. process
     chunks = chunk_file(str(file_location))
     add_documents_to_db(chunks)
     
     return templates.TemplateResponse("index.html", {
-        "request": request, 
-        "message": f"Successfully ingested {file.filename}"
+        "request": request,
+        "message": f"Successfully ingested {safe_name}"
     })
 
 @app.post("/search", response_class=HTMLResponse)
