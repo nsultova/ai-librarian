@@ -3,184 +3,174 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Private Library</title>
+    <title>Private Library</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Syne:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-<header>
-    <h1>Privte Library RAG </h1>
-</header>
+<div class="shell">
 
-<main>
+    <!--
+      .search-form is now the flex-row layout container itself.
+      Sidebar filters and the compose textarea are both inside
+      this one form — they submit together naturally.
+      No display:contents, no JS.
+    -->
+    <form action="/search" method="post" class="search-form">
 
-    <!-- Upload -->
-    <section class="card" id="upload">
-        <h2>Add a Book</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data">
-            <input type="file" name="file" accept=".pdf,.epub" required>
-            <button type="submit">Upload</button>
-        </form>
+        <aside class="sidebar">
 
-        {% if message %}
-        <p class="message success">{{ message }}</p>
-        {% endif %}
-    </section>
-
-    <!-- Search + Filters -->
-    <section class="card" id="search">
-        <h2>Search</h2>
-        <form action="/search" method="post">
-
-            <div class="field">
-                <label for="query">Question</label>
-                <input
-                    id="query"
-                    name="query"
-                    type="text"
-                    placeholder="Ask anything about your library..."
-                    value="{{ query or '' }}"
-                    required
-                >
+            <div class="sidebar-brand">
+                <span class="brand-mark">&#9673;</span>
+                <div class="brand-text">
+                    <h1 class="brand-name">Private Library</h1>
+                    <p class="brand-tagline">Personal reading intelligence</p>
+                </div>
             </div>
 
-            {% if filter_options.authors or filter_options.titles or filter_options.file_types %}
-            <fieldset class="filters">
-                <legend>Filters</legend>
+            <div class="sidebar-section">
+                <p class="section-label">Collection</p>
+                {% if filter_options.titles %}
+                <ul class="book-list">
+                    {% for t in filter_options.titles %}
+                    <li class="book-item {% if active_filters and active_filters.get('title') == t %}is-active{% endif %}">
+                        <span class="book-dot"></span>
+                        <span>{{ t }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="collection-empty">No books ingested yet.</p>
+                {% endif %}
+            </div>
+
+            {% if filter_options.authors or filter_options.file_types or filter_options.titles %}
+            <div class="sidebar-section">
+                <p class="section-label">
+                    Filter search
+                    {% if active_filters %}<span class="filter-badge">{{ active_filters | length }}</span>{% endif %}
+                </p>
 
                 {% if filter_options.authors %}
-                <div class="field">
-                    <label for="author">Author</label>
-                    <select id="author" name="author">
+                <div class="filter-field">
+                    <label for="f-author">Author</label>
+                    <select id="f-author" name="author">
                         <option value="all">All authors</option>
                         {% for a in filter_options.authors %}
-                        <option value="{{ a }}"
-                            {% if active_filters and active_filters.get('author') == a %}selected{% endif %}>
-                            {{ a }}
-                        </option>
+                        <option value="{{ a }}" {% if active_filters and active_filters.get('author') == a %}selected{% endif %}>{{ a }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% endif %}
 
                 {% if filter_options.titles %}
-                <div class="field">
-                    <label for="title">Title</label>
-                    <select id="title" name="title">
+                <div class="filter-field">
+                    <label for="f-title">Title</label>
+                    <select id="f-title" name="title">
                         <option value="all">All titles</option>
                         {% for t in filter_options.titles %}
-                        <option value="{{ t }}"
-                            {% if active_filters and active_filters.get('title') == t %}selected{% endif %}>
-                            {{ t }}
-                        </option>
+                        <option value="{{ t }}" {% if active_filters and active_filters.get('title') == t %}selected{% endif %}>{{ t }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% endif %}
 
                 {% if filter_options.file_types %}
-                <div class="field">
-                    <label for="file_type">Format</label>
-                    <select id="file_type" name="file_type">
+                <div class="filter-field">
+                    <label for="f-format">Format</label>
+                    <select id="f-format" name="file_type">
                         <option value="all">All formats</option>
                         {% for ft in filter_options.file_types %}
-                        <option value="{{ ft }}"
-                            {% if active_filters and active_filters.get('file_type') == ft %}selected{% endif %}>
-                            {{ ft | upper }}
-                        </option>
+                        <option value="{{ ft }}" {% if active_filters and active_filters.get('file_type') == ft %}selected{% endif %}>{{ ft | upper }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 {% endif %}
 
-            </fieldset>
+            </div>
             {% endif %}
 
-            <button type="submit">Search</button>
-        </form>
-    </section>
+        </aside>
 
-    <!-- Results -->
-    {% if answer %}
-    <section class="card" id="results">
-        <h2>Answer</h2>
-        <p class="answer">{{ answer }}</p>
+        <main class="main-panel">
 
-        {% if sources %}
-        <div class="sources">
-            <h3>Sources</h3>
-            <ul>
-                {% for s in sources %}
-                <li>{{ s }}</li>
-                {% endfor %}
-            </ul>
+            <div class="answer-area">
+                {% if answer %}
+                <article class="answer-card">
+                    <div class="answer-card__q">
+                        <span class="card-label">You asked</span>
+                        <p class="query-echo">{{ query }}</p>
+                    </div>
+                    <div class="answer-card__sep"></div>
+                    <div class="answer-card__a">
+                        <span class="card-label">Answer</span>
+                        <p class="answer-prose">{{ answer }}</p>
+                    </div>
+                    {% if sources %}
+                    <footer class="answer-card__footer">
+                        <span class="card-label">Sources</span>
+                        <ul class="source-list">
+                            {% for s in sources %}
+                            <li>{{ s }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% if active_filters %}
+                        <div class="tag-row">
+                            {% for key, val in active_filters.items() %}
+                            <span class="ftag">{{ key }}: {{ val }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </footer>
+                    {% endif %}
+                </article>
+                {% else %}
+                <div class="empty-state">
+                    <p class="empty-mark">&#9673;</p>
+                    <p class="empty-headline">Ask your library anything.</p>
+                    <p class="empty-body">Questions are answered only from your ingested collection.</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="compose-bar">
+                <div class="compose-inner">
+                    <textarea
+                        name="query"
+                        rows="1"
+                        placeholder="What would you like to know from your library?"
+                        required
+                        aria-label="Your question"
+                    >{{ query or '' }}</textarea>
+                    <button type="submit" class="ask-btn">
+                        Ask <span aria-hidden="true">&#8594;</span>
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+    </form>
+
+    <!--
+      Upload form is a sibling, NOT nested inside search-form (invalid HTML).
+      position:fixed in CSS places it visually at the sidebar bottom.
+    -->
+    <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+        <p class="section-label">Add to collection</p>
+        <div class="upload-row">
+            <input type="file" name="file" accept=".pdf,.epub" required class="file-input">
+            <button type="submit" class="upload-btn">Ingest</button>
         </div>
+        {% if message %}
+        <p class="upload-feedback">{{ message }}</p>
         {% endif %}
+    </form>
 
-        {% if active_filters %}
-        <div class="active-filters">
-            <span>Filtered by:</span>
-            {% for key, val in active_filters.items() %}
-            <span class="tag">{{ key }}: {{ val }}</span>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </section>
-    {% endif %}
-
-</main>
+</div>
 
 </body>
 </html>
-
-
-
-
-<!-- <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Private Library</title>
-    <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-
-    <div class="container">
-        <h1>Private Library RAG</h1>
-        
-        <form action="/search" method="post" class="search-form">
-            <input type="text" name="query" placeholder="Ask your library..." required value="{{ query or '' }}" autocomplete="off">
-            <button type="submit">Ask</button>
-        </form>
-
-        {% if answer %}
-        <div class="result-section">
-            <h2>Answer</h2>
-            <div class="answer-box">
-                {{ answer }}
-            </div>
-            
-            {% if sources %}
-            <div class="sources">
-                <small>Sources: {{ sources|join(', ') }}</small>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-
-        <div class="upload-section">
-            <h3>Add Documents</h3>
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept=".pdf,.epub" required>
-                <button type="submit" class="secondary">Ingest</button>
-            </form>
-            
-            {% if message %}
-                <p class="success">{{ message }}</p>
-            {% endif %}
-        </div>
-    </div>
-
-</body>
-</html> -->
