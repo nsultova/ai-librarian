@@ -67,6 +67,7 @@ python -m src.test_models rag  # run one test
 * try with quicker models
 * improve retrieval itself
 * improve UI
+    * Feedback on ingestion
 * build proper design?
 * make actually useful
 * list/show ingested books
