@@ -11,7 +11,5 @@ pypdf
 ebooklib
 bs4
 sentence-transformers
-unstructured
 libsass
 PyPDF2
-pypandoc
