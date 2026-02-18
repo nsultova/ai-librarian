@@ -56,6 +56,8 @@ def add_documents_to_db(chunks: List[Document]) -> None:
         return
     
     try:
+        logger.info(f" Generating embeddings for {len(chunks)} chunks...")
+        logger.info(" This may take 30-60 seconds for large documents...")
         db = get_vector_db()
         db.add_documents(chunks)
         logger.info(f"Successfully added {len(chunks)} chunks to Vector DB.")
