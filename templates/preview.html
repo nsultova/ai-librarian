@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Private Library — Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Syne:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--sb-bg:#131109;--sb-border:#2A2720;--sb-text:#A09585;--sb-text-hi:#D4C9B8;--sb-accent:#C09A5C;--sb-accent-dim:#7A6038;--sb-active-bg:#1E1B13;--main-bg:#F0EBE0;--card-bg:#FDFAF4;--card-border:#E0D9CC;--card-shadow:0 2px 24px rgba(30,24,12,.08);--compose-bg:#FDFAF4;--compose-border:#D8D2C4;--compose-shadow:0 -1px 0 0 #E0D9CC,0 -8px 24px rgba(30,24,12,.06);--ink:#1C1914;--ink-mid:#5C5649;--ink-light:#8C8278;--accent:#7B5C34;--accent-hi:#9B7448;--success:#4A7A5C;--sidebar-w:272px;--radius-sm:3px;--radius-md:6px;--radius-lg:10px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Syne',system-ui,sans-serif;background:var(--sb-bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+.shell{display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:1fr auto;height:100vh}
+.search-form{display:contents}
+.sidebar{grid-column:1;grid-row:1;background:var(--sb-bg);border-right:1px solid var(--sb-border);display:flex;flex-direction:column;gap:0;overflow-y:auto;overflow-x:hidden;padding-bottom:.5rem}
+.sidebar::-webkit-scrollbar{width:3px}.sidebar::-webkit-scrollbar-track{background:transparent}.sidebar::-webkit-scrollbar-thumb{background:var(--sb-border);border-radius:2px}
+.sidebar-brand{display:flex;align-items:center;gap:.75rem;padding:1.6rem 1.25rem 1.4rem;border-bottom:1px solid var(--sb-border);flex-shrink:0}
+.brand-mark{font-size:1.1rem;color:var(--sb-accent);flex-shrink:0;line-height:1}
+.brand-name{font-family:'DM Serif Display',Georgia,serif;font-size:1.05rem;font-weight:400;color:var(--sb-text-hi);letter-spacing:.01em;line-height:1.2}
+.brand-tagline{font-size:.68rem;color:var(--sb-text);letter-spacing:.04em;margin-top:.2rem;text-transform:uppercase;font-weight:500}
+.sidebar-section{padding:1.2rem 1.25rem;border-bottom:1px solid var(--sb-border)}
+.section-label{font-size:.63rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--sb-text);margin-bottom:.8rem;display:flex;align-items:center;gap:.5rem}
+.filter-badge{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--sb-accent);color:var(--sb-bg);border-radius:50%;font-size:.6rem;font-weight:600;line-height:1}
+.book-list{list-style:none;display:flex;flex-direction:column;gap:2px}
+.book-item{display:flex;align-items:baseline;gap:.55rem;padding:.4rem .6rem;border-radius:var(--radius-sm);font-size:.8rem;color:var(--sb-text);letter-spacing:.01em;line-height:1.4;transition:background .15s,color .15s;cursor:default}
+.book-item:hover{background:var(--sb-active-bg);color:var(--sb-text-hi)}
+.book-item.is-active{background:var(--sb-active-bg);color:var(--sb-text-hi)}
+.book-dot{width:5px;height:5px;border-radius:50%;background:var(--sb-accent-dim);flex-shrink:0;margin-top:.35em}
+.book-item.is-active .book-dot{background:var(--sb-accent)}
+.filter-field{margin-bottom:.75rem}.filter-field:last-child{margin-bottom:0}
+.filter-field label{display:block;font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--sb-text);margin-bottom:.3rem}
+.filter-field select{width:100%;padding:.42rem 2rem .42rem .65rem;font-family:'Syne',sans-serif;font-size:.78rem;color:var(--sb-text-hi);background-color:var(--sb-active-bg);border:1px solid var(--sb-border);border-radius:var(--radius-sm);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23A09585' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right .6rem center;transition:border-color .15s}
+.filter-field select:focus{border-color:var(--sb-accent-dim);color:var(--sb-text-hi)}
+.main-panel{grid-column:2;grid-row:1/3;background:var(--main-bg);display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.answer-area{flex:1;overflow-y:auto;padding:3rem 2.5rem 1.5rem;display:flex;align-items:flex-start;justify-content:center}
+.answer-area::-webkit-scrollbar{width:4px}.answer-area::-webkit-scrollbar-track{background:transparent}.answer-area::-webkit-scrollbar-thumb{background:var(--card-border);border-radius:2px}
+.answer-card{width:100%;max-width:720px;background:var(--card-bg);border:1px solid var(--card-border);border-radius:var(--radius-lg);box-shadow:var(--card-shadow);overflow:hidden;animation:slide-up .35s ease}
+.answer-card__q{padding:1.75rem 2rem 1.5rem}
+.answer-card__sep{height:1px;background:var(--card-border);margin:0 2rem}
+.answer-card__a{padding:1.5rem 2rem 1.75rem}
+.answer-card__footer{padding:1.1rem 2rem 1.25rem;background:var(--main-bg);border-top:1px solid var(--card-border)}
+.card-label{display:block;font-size:.63rem;font-weight:600;text-transform:uppercase;letter-spacing:.14em;color:var(--ink-light);margin-bottom:.55rem}
+.query-echo{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.15rem;font-style:italic;color:var(--ink-mid);line-height:1.6}
+.answer-prose{font-family:'Cormorant Garamond',Georgia,serif;font-size:1.25rem;line-height:1.85;color:var(--ink);font-weight:400}
+.source-list{list-style:none;display:flex;flex-direction:column;gap:.25rem;margin-bottom:.75rem}
+.source-list li{font-size:.8rem;color:var(--accent-hi);padding-left:1rem;position:relative;line-height:1.5}
+.source-list li::before{content:'—';position:absolute;left:0;color:var(--ink-light)}
+.source-list:only-child{margin-bottom:0}
+.tag-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.ftag{font-size:.68rem;font-weight:500;letter-spacing:.05em;padding:.2rem .55rem;background:var(--card-bg);border:1px solid var(--card-border);border-radius:2px;color:var(--ink-mid)}
+.empty-state{text-align:center;max-width:400px;margin:auto;padding:4rem 2rem;animation:fade-in .5s ease}
+.empty-mark{font-size:2rem;color:var(--card-border);margin-bottom:1.5rem;line-height:1}
+.empty-headline{font-family:'DM Serif Display',Georgia,serif;font-size:1.5rem;color:var(--ink-mid);margin-bottom:.6rem;font-weight:400}
+.empty-body{font-size:.85rem;color:var(--ink-light);line-height:1.6;letter-spacing:.01em}
+.compose-bar{flex-shrink:0;padding:1rem 2.5rem 1.4rem;background:var(--compose-bg);box-shadow:var(--compose-shadow)}
+.compose-inner{display:flex;align-items:flex-end;gap:.75rem;max-width:720px;margin:0 auto;background:var(--card-bg);border:1px solid var(--compose-border);border-radius:var(--radius-lg);padding:.75rem .75rem .75rem 1.25rem;transition:border-color .2s}
+.compose-inner:focus-within{border-color:var(--accent-hi)}
+.compose-inner textarea{flex:1;font-family:'Syne',sans-serif;font-size:.95rem;color:var(--ink);background:transparent;border:none;outline:none;resize:none;line-height:1.55;max-height:140px;overflow-y:auto}
+.compose-inner textarea::placeholder{color:var(--ink-light)}
+.ask-btn{flex-shrink:0;display:flex;align-items:center;gap:.4rem;padding:.6rem 1.2rem;background:var(--accent);color:#FDFAF4;border:none;border-radius:var(--radius-md);font-family:'Syne',sans-serif;font-size:.88rem;font-weight:600;letter-spacing:.03em;cursor:pointer;transition:background .15s,transform .1s;white-space:nowrap}
+.ask-btn:hover{background:var(--accent-hi)}
+.ask-btn:active{transform:scale(.97)}
+.upload-form{grid-column:1;grid-row:2;background:var(--sb-bg);border-top:1px solid var(--sb-border);border-right:1px solid var(--sb-border);padding:1rem 1.25rem 1.2rem}
+.upload-row{display:flex;align-items:center;gap:.5rem;margin-top:.5rem}
+.file-input{flex:1;min-width:0;font-family:'Syne',sans-serif;font-size:.72rem;color:var(--sb-text);cursor:pointer}
+.file-input::file-selector-button{font-family:'Syne',sans-serif;font-size:.7rem;font-weight:500;color:var(--sb-text-hi);background:var(--sb-active-bg);border:1px solid var(--sb-border);border-radius:var(--radius-sm);padding:.3rem .6rem;cursor:pointer;margin-right:.5rem;transition:border-color .15s}
+.file-input::file-selector-button:hover{border-color:var(--sb-accent-dim)}
+.upload-btn{flex-shrink:0;padding:.35rem .85rem;background:transparent;color:var(--sb-accent);border:1px solid var(--sb-accent-dim);border-radius:var(--radius-sm);font-family:'Syne',sans-serif;font-size:.72rem;font-weight:600;letter-spacing:.05em;cursor:pointer;transition:background .15s,color .15s;white-space:nowrap}
+.upload-btn:hover{background:var(--sb-accent-dim);color:var(--sb-text-hi);border-color:var(--sb-accent-dim)}
+.upload-feedback{margin-top:.65rem;font-size:.72rem;color:var(--success);font-style:italic;line-height:1.4;opacity:.9}
+@keyframes slide-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+.sidebar,.answer-area{scrollbar-width:thin;scrollbar-color:var(--sb-border) transparent}
+</style>
+</head>
+<body>
+<div class="shell">
+  <form class="search-form">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <span class="brand-mark">&#9673;</span>
+        <div class="brand-text">
+          <h1 class="brand-name">Private Library</h1>
+          <p class="brand-tagline">Personal reading intelligence</p>
+        </div>
+      </div>
+      <div class="sidebar-section">
+        <p class="section-label">Collection</p>
+        <ul class="book-list">
+          <li class="book-item is-active"><span class="book-dot"></span><span>Labyrinths</span></li>
+          <li class="book-item"><span class="book-dot"></span><span>The Name of the Rose</span></li>
+          <li class="book-item"><span class="book-dot"></span><span>If on a winter's night a traveler</span></li>
+          <li class="book-item"><span class="book-dot"></span><span>Ficciones</span></li>
+        </ul>
+      </div>
+      <div class="sidebar-section">
+        <p class="section-label">Filter search <span class="filter-badge">1</span></p>
+        <div class="filter-field">
+          <label>Author</label>
+          <select><option selected>Borges, Jorge Luis</option><option>Eco, Umberto</option><option>Calvino, Italo</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Title</label>
+          <select><option>All titles</option><option selected>Labyrinths</option><option>Ficciones</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Format</label>
+          <select><option>All formats</option><option>PDF</option><option>EPUB</option></select>
+        </div>
+      </div>
+    </aside>
+    <main class="main-panel">
+      <div class="answer-area">
+        <article class="answer-card">
+          <div class="answer-card__q">
+            <span class="card-label">You asked</span>
+            <p class="query-echo">What does Borges say about the nature of labyrinths and infinity?</p>
+          </div>
+          <div class="answer-card__sep"></div>
+          <div class="answer-card__a">
+            <span class="card-label">Answer</span>
+            <p class="answer-prose">For Borges, the labyrinth is not merely an architectural puzzle but a metaphysical condition. He treats it as the natural shape of the universe itself — infinite, recursive, and ultimately indifferent to the creature lost within it. In both <em>Labyrinths</em> and <em>Ficciones</em>, he returns again and again to the idea that all labyrinths conceal something monstrous at their center: sometimes a Minotaur, sometimes a god, sometimes nothing at all — and that the nothing is perhaps the most terrifying possibility.</p>
+          </div>
+          <footer class="answer-card__footer">
+            <span class="card-label">Sources</span>
+            <ul class="source-list">
+              <li>Labyrinths by Borges, Jorge Luis</li>
+              <li>Ficciones by Borges, Jorge Luis</li>
+            </ul>
+            <div class="tag-row">
+              <span class="ftag">author: Borges, Jorge Luis</span>
+              <span class="ftag">title: Labyrinths</span>
+            </div>
+          </footer>
+        </article>
+      </div>
+      <div class="compose-bar">
+        <div class="compose-inner">
+          <textarea rows="1" placeholder="What would you like to know from your library?">What does Borges say about the nature of labyrinths and infinity?</textarea>
+          <button type="button" class="ask-btn">Ask <span>&#8594;</span></button>
+        </div>
+      </div>
+    </main>
+  </form>
+  <form class="upload-form">
+    <p class="section-label">Add to collection</p>
+    <div class="upload-row">
+      <input type="file" accept=".pdf,.epub" class="file-input">
+      <button type="button" class="upload-btn">Ingest</button>
+    </div>
+    <p class="upload-feedback">Successfully ingested: ficciones.epub</p>
+  </form>
+</div>
+</body>
+</html>
