@@ -19,6 +19,43 @@ def clean_txt(txt:str) -> str:
     txt = re.sub(r'\s+', ' ', txt)
     return txt.strip()
 
+
+def load_epub(file_path: str) -> List[Document]:
+    """
+    Load an EPUB using ebooklib + BeautifulSoup.
+    Each spine item (chapter) becomes one Document, preserving reading order.
+    No pandoc or system dependencies required.
+    """
+    import ebooklib
+    from ebooklib import epub
+    from bs4 import BeautifulSoup
+
+    book = epub.read_epub(file_path)
+    docs = []
+
+    for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
+        soup = BeautifulSoup(item.get_content(), "html.parser")
+
+        # drop nav/TOC items — they're structural, not content
+        if soup.find("nav"):
+            continue
+
+        text = soup.get_text(separator="\n")
+        text = clean_txt(text)
+
+        if not text:
+            continue
+
+        docs.append(
+            Document(
+                page_content=text,
+                metadata={"source": file_path, "chapter": item.get_name()},
+            )
+        )
+
+    logger.info(f"Loaded {len(docs)} chapters from EPUB")
+    return docs
+
 def chunk_file(file_path:str) -> List[Document]:
     
     logger.info(f" Starting ingestion: {file_path}")
