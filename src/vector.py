@@ -62,3 +62,13 @@ def add_documents_to_db(chunks: List[Document]) -> None:
     except Exception as e:
         logger.error(f"Failed to add documents to database: {e}")
         raise
+    
+def reset_database() -> None:
+    """Delete all documents from the vector database."""
+    try:
+        db = get_vector_db()
+        db.delete_collection()
+        logger.info("Vector database cleared")
+    except Exception as e:
+        logger.error(f"Failed to clear database: {e}")
+        raise
