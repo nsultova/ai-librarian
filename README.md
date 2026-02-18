@@ -75,6 +75,8 @@ python -m src.test_models rag  # run one test
 * add multimodality
 * add caching where necessary
 * add pagination(?)
+* Real-time Progress Streaming (Server-Sent Events)
+    * ..if I ever do sthsth-scaling/multi-user/big files
 
 
 ##### MODELS USED
