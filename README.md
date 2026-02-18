@@ -62,15 +62,17 @@ python -m src.test_models rag  # run one test
 
 #### TODO
 * include `metadata.py`
+* implement metadata extraction -done
 * refine metadata
-* ingest multiple formats
-* try with quicker models
+* add tagging system
+* ingest multiple formats - partially done
+* try with quicker models - done
 * improve retrieval itself
 * improve UI
     * Feedback on ingestion
 * build proper design?
 * make actually useful
-* list/show ingested books
+* list/show ingested books - done
 * backup database 
 * add multimodality
 * add caching where necessary
@@ -81,5 +83,5 @@ python -m src.test_models rag  # run one test
 
 ##### MODELS USED
 
-Embedding: https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2
-LLM: https://huggingface.co/meta-llama/Llama-3.2-1B
+Embedding: https://huggingface.co/intfloat/e5-small-v2
+LLM: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
