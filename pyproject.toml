@@ -21,5 +21,4 @@ dependencies = [
     "unstructured",
     "libsass",
     "pypdf2>=3.0.1",
-    "pypandoc>=1.16.2",
 ]
