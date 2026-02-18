@@ -9,6 +9,152 @@
 <body>
 
     <div class="container">
+        <h1>📚 Private Library RAG</h1>
+        
+        <form action="/search" method="post" class="search-form" id="searchForm">
+            <div class="search-main">
+                <input type="text" name="query" placeholder="Ask your library..." 
+                       required value="{{ query or '' }}" autocomplete="off">
+                <button type="submit">Ask</button>
+            </div>
+            
+            <!-- Collapsible filters -->
+            <details class="filters-section">
+                <summary>🔍 Advanced Filters</summary>
+                <div class="filters-grid" id="filtersContainer">
+                    <div class="filter-group">
+                        <label for="author">Author</label>
+                        <select name="author" id="author">
+                            <option value="all">All Authors</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="file_type">File Type</label>
+                        <select name="file_type" id="file_type">
+                            <option value="all">All Types</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="title">Specific Book</label>
+                        <select name="title" id="title">
+                            <option value="all">All Books</option>
+                        </select>
+                    </div>
+                </div>
+                
+                {% if active_filters %}
+                <div class="active-filters">
+                    <strong>Active filters:</strong>
+                    {% for key, value in active_filters.items() %}
+                        <span class="filter-badge">{{ key }}: {{ value }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </details>
+        </form>
+
+        {% if answer %}
+        <div class="result-section">
+            <h2>Answer</h2>
+            <div class="answer-box">
+                {{ answer }}
+            </div>
+            
+            {% if sources %}
+            <div class="sources">
+                <small><strong>Sources:</strong> {{ sources|join(', ') }}</small>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="upload-section">
+            <h3>Add Documents</h3>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".pdf,.epub" required>
+                <button type="submit" class="secondary">Ingest</button>
+            </form>
+            
+            {% if message %}
+                <p class="success">{{ message }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        // Fetch and populate filter options on page load
+        async function loadFilters() {
+            try {
+                const response = await fetch('/api/filters');
+                const data = await response.json();
+                
+                // Populate authors
+                const authorSelect = document.getElementById('author');
+                data.authors.forEach(author => {
+                    const option = document.createElement('option');
+                    option.value = author;
+                    option.textContent = author;
+                    authorSelect.appendChild(option);
+                });
+                
+                // Populate file types
+                const typeSelect = document.getElementById('file_type');
+                data.file_types.forEach(type => {
+                    const option = document.createElement('option');
+                    option.value = type;
+                    option.textContent = type.toUpperCase();
+                    typeSelect.appendChild(option);
+                });
+                
+                // Populate titles
+                const titleSelect = document.getElementById('title');
+                data.titles.forEach(title => {
+                    const option = document.createElement('option');
+                    option.value = title;
+                    option.textContent = title;
+                    titleSelect.appendChild(option);
+                });
+                
+            } catch (error) {
+                console.error('Failed to load filters:', error);
+            }
+        }
+        
+        // Load filters when page loads
+        document.addEventListener('DOMContentLoaded', loadFilters);
+    </script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Private Library</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <div class="container">
         <h1>Private Library RAG</h1>
         
         <form action="/search" method="post" class="search-form">
@@ -45,4 +191,4 @@
     </div>
 
 </body>
-</html>
+</html> -->
