@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import argparse
+import traceback
 from src.config import LLM_MODEL
 from src.rag import PROMPT_TEMPLATE
 
@@ -47,7 +48,6 @@ def test_embedding_model():
         
     except Exception as e:
         print(f"\n  EMBEDDING MODEL TEST FAILED: {e}")
-        import traceback
         traceback.print_exc()
         return False
     
@@ -97,14 +97,64 @@ def test_rag_pipeline():
         return False
     except Exception as e:
         print(f"\nFAILED: {e}")
-        import traceback
         traceback.print_exc()
         return False
 
 
+    
+def test_metadata_retrieval():
+    """Test if metadata filtering works."""
+    print("=" * 60)
+    print("TESTING METADATA RETRIEVAL")
+    print("=" * 60)
+    
+    try:
+        from src.vector import get_vector_db
+        
+        db = get_vector_db()
+        
+        # Check if we have any documents
+        collection = db._collection
+        count = collection.count()
+        print(f"\nTotal documents in DB: {count}")
+        
+        if count == 0:
+            print("No documents found. Upload some files first.")
+            return False
+        
+        # Sample a few docs to see their metadata
+        results = db.similarity_search("test", k=3)
+        
+        print("\nSample metadata from retrieved chunks:")
+        for i, doc in enumerate(results, 1):
+            print(f"\n--- Chunk {i} ---")
+            print(f"Metadata: {doc.metadata}")
+            print(f"Content preview: {doc.page_content[:100]}...")
+        
+        # Test filtering (if you have metadata)
+        if results and 'author' in results[0].metadata:
+            author = results[0].metadata['author']
+            print(f"\nTesting filter by author: {author}")
+            
+            filtered_results = db.similarity_search(
+                "test",
+                k=3,
+                filter={"author": author}
+            )
+            print(f"Found {len(filtered_results)} chunks by {author}")
+        
+        print("\n✓ METADATA RETRIEVAL TEST PASSED")
+        return True
+        
+    except Exception as e:
+        print(f"\n✗ METADATA RETRIEVAL TEST FAILED: {e}")
+        traceback.print_exc()
+        return False
+
 TESTS = {
     "embedding": test_embedding_model,
     "rag": test_rag_pipeline,
+    "metadata": test_metadata_retrieval
 }
 
 
