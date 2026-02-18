@@ -21,8 +21,10 @@ def clean_txt(txt:str) -> str:
 
 def chunk_file(file_path:str) -> List[Document]:
     
+    logger.info(f" Starting ingestion: {file_path}")
     file_ext = file_path.split('.')[-1].lower()
     
+    logger.info(f" Loading {file_ext.upper()} file...")
     if file_ext == 'pdf':
         loader = PyPDFLoader(file_path)
     elif file_ext == 'epub':
@@ -35,10 +37,12 @@ def chunk_file(file_path:str) -> List[Document]:
     # meta_info = get_file_metadata(file_path)
     # print(f"Detected Metadata: {meta_info}")
         # Extract metadata once per file
+    logger.info(" Extracting metadata...")
     file_metadata = get_file_metadata(file_path)
     logger.info(f"Extracted metadata: {file_metadata}")
     
     # clean
+    logger.info(" Cleaning text...")
     for idx, doc in enumerate(raw_docs):
         doc.page_content = clean_txt(doc.page_content)
         doc.metadata.update(file_metadata)
@@ -46,8 +50,10 @@ def chunk_file(file_path:str) -> List[Document]:
         # metadata for later retrieval visibility
         # doc.metadata['source'] = file_path.split('/')[-1]
         # doc.metadata.update(meta_info)
+    logger.info(f" Cleaned {len(raw_docs)} sections")
         
     # chunkchunk
+    logger.info(f" Chunking (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})...")
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP, # overlap ensures context isn't lost at cut-offs
@@ -55,9 +61,12 @@ def chunk_file(file_path:str) -> List[Document]:
     )
     
     chunks = text_splitter.split_documents(raw_docs)
+    logger.info(f" Created {len(chunks)} chunks")
     
     print(f"Processed {len(chunks)} chunks from {file_path}")
     # print(f"Processed {len(chunks)} chunks from {meta_info['title']}")
+    logger.info(f" Ingestion complete: {file_metadata.get('title', 'Unknown')}")
+
     return chunks
         
     
