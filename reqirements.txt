@@ -14,4 +14,4 @@ sentence-transformers
 unstructured
 libsass
 PyPDF2
-ebooklib
+pypandoc

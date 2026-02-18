@@ -25,12 +25,26 @@ Answer concisely and cite relevant details from the context where useful.
 #     docs: List[Document] = retriever.invoke(question)
 #     context = "\n\n".join(doc.page_content for doc in docs)
 #     sources = list({d.metadata.get("source", "Unknown") for d in docs})
+
+def _build_chroma_filter(filters: Dict[str, Any]) -> Dict:
+    """
+    ChromaDB requires explicit operators for all comparisons.
+    Single field:   {"author": {"$eq": "..."}}
+    Multiple fields: {"$and": [{"author": {"$eq": "..."}}, ...]}
+    """
+    conditions = [{k: {"$eq": v}} for k, v in filters.items()]
+
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
+
+
 def query_library(question: str, filters: Optional[Dict[str, Any]] = None) -> Tuple[str, List[str]]:
     db = get_vector_db()
     
     search_kwargs: Dict[str, Any] = {"k": RETRIEVAL_K}
     if filters:
-        search_kwargs["filter"] = filters
+        search_kwargs["filter"] = _build_chroma_filter(filters)
     
     retriever = db.as_retriever(
         search_type="similarity",
