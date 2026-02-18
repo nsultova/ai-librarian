@@ -72,6 +72,8 @@ python -m src.test_models rag  # run one test
 * list/show ingested books
 * backup database 
 * add multimodality
+* add caching where necessary
+* add pagination(?)
 
 
 ##### MODELS USED
