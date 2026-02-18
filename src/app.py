@@ -1,14 +1,20 @@
 import shutil
+import json
+import logging
 from pathlib import Path
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from typing import Optional
 
 from src.config import UPLOAD_DIR
 from src.ingest import chunk_file 
-from src.vector import add_documents_to_db
+from src.vector import add_documents_to_db, get_vector_db
 from src.rag import query_library
+
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="My Private Library")
 
@@ -54,6 +60,40 @@ async def search(request: Request, query: str = Form(...)):
         "answer": answer,
         "sources": sources
     })
+    
+@app.get("/api/filters")
+async def get_available_filters():
+    """Return available filter options from the database."""
+    try:
+        db = get_vector_db()
+        collection = db._collection
+        
+        # Get all unique metadata values
+        all_metadata = collection.get(include=['metadatas'])
+        
+        if not all_metadata or not all_metadata['metadatas']:
+            return {"authors": [], "file_types": [], "titles": []}
+        
+        authors = set()
+        file_types = set()
+        titles = set()
+        
+        for meta in all_metadata['metadatas']:
+            if meta.get('author') and meta['author'] != 'Unknown':
+                authors.add(meta['author'])
+            if meta.get('file_type'):
+                file_types.add(meta['file_type'])
+            if meta.get('title'):
+                titles.add(meta['title'])
+        
+        return {
+            "authors": sorted(list(authors)),
+            "file_types": sorted(list(file_types)),
+            "titles": sorted(list(titles))
+        }
+    except Exception as e:
+        logger.error(f"Failed to get filters: {e}")
+        return {"authors": [], "file_types": [], "titles": []}
 
 if __name__ == "__main__":
     import uvicorn
