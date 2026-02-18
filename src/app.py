@@ -50,15 +50,35 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         "message": f"Successfully ingested {safe_name}"
     })
 
+    
 @app.post("/search", response_class=HTMLResponse)
-async def search(request: Request, query: str = Form(...)):
-    answer, sources = query_library(query)
+async def search(
+    request: Request,
+    query: str = Form(...),
+    author: Optional[str] = Form(None),
+    file_type: Optional[str] = Form(None),
+    title: Optional[str] = Form(None)
+):
+    """Search with optional filters."""
+    
+    # Build filter dict
+    filters = {}
+    if author and author != "all":
+        filters["author"] = author
+    if file_type and file_type != "all":
+        filters["file_type"] = file_type
+    if title and title != "all":
+        filters["title"] = title
+    
+    # Pass to RAG
+    answer, sources = query_library(query, filters if filters else None)
     
     return templates.TemplateResponse("index.html", {
         "request": request,
         "query": query,
         "answer": answer,
-        "sources": sources
+        "sources": sources,
+        "active_filters": filters
     })
     
 @app.get("/api/filters")
@@ -94,6 +114,8 @@ async def get_available_filters():
     except Exception as e:
         logger.error(f"Failed to get filters: {e}")
         return {"authors": [], "file_types": [], "titles": []}
+    
+
 
 if __name__ == "__main__":
     import uvicorn
