@@ -6,6 +6,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+"""
+Test extraction - super helpful to get a sanity check first
+
+python -c "from src.metadata import get_file_metadata; import pprint; pprint.pprint(get_file_metadata('data/uploads/some_book.pdf'))" 
+"""
+
 def extract_pdf_metadata(file_path: str) -> Dict[str, Any]:
     """Extract metadata from PDF file."""
     try:
@@ -16,9 +23,6 @@ def extract_pdf_metadata(file_path: str) -> Dict[str, Any]:
             return {
                 'title': info.get('/Title', '').strip() or Path(file_path).stem,
                 'author': info.get('/Author', '').strip() or 'Unknown',
-                'creator': info.get('/Creator', '').strip(),
-                'producer': info.get('/Producer', '').strip(),
-                'creation_date': info.get('/CreationDate', ''),
                 'page_count': len(pdf.pages)
             }
     except Exception as e:
