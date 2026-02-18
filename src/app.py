@@ -25,6 +25,11 @@ def _get_filter_options() -> Dict[str, List[str]]:
     """
     Pull unique metadata values from the DB for populating filter dropdowns.
     Returns empty lists if the DB is empty or unavailable.
+    
+    Note:
+    Called every time a page is rendered, which means every request hits the DB
+    — fine for local PoC but not beyond
+    
     """
     try:
         db = get_vector_db()
