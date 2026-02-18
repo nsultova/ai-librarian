@@ -1,6 +1,6 @@
 import re
 from typing import List
-from langchain_community.document_loaders import PyPDFLoader, UnstructuredEPubLoader
+from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from src.config import CHUNK_SIZE, CHUNK_OVERLAP
@@ -58,18 +58,17 @@ def load_epub(file_path: str) -> List[Document]:
 
 def chunk_file(file_path:str) -> List[Document]:
     
-    logger.info(f" Starting ingestion: {file_path}")
-    file_ext = file_path.split('.')[-1].lower()
-    
-    logger.info(f" Loading {file_ext.upper()} file...")
-    if file_ext == 'pdf':
+    logger.info(f"Starting ingestion: {file_path}")
+    file_ext = file_path.split(".")[-1].lower()
+
+    logger.info(f"Loading {file_ext.upper()} file...")
+    if file_ext == "pdf":
         loader = PyPDFLoader(file_path)
-    elif file_ext == 'epub':
-        loader = UnstructuredEPubLoader(file_path)
+        raw_docs = loader.load()
+    elif file_ext == "epub":
+        raw_docs = load_epub(file_path)
     else:
-        raise ValueError(f"unsupported file format (for now): {file_ext}")
-    
-    raw_docs = loader.load()
+        raise ValueError(f"Unsupported file format: {file_ext}")
     
     # meta_info = get_file_metadata(file_path)
     # print(f"Detected Metadata: {meta_info}")
