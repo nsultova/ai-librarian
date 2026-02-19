@@ -89,7 +89,7 @@ python -m src.test_models rag  # run one test
 Embedding: https://huggingface.co/intfloat/e5-small-v2
 LLM: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
 
-
+!!! If you change the embedding-model you NEED to reingest everything
 
 
 ##### Various tests

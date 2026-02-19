@@ -2,7 +2,7 @@ import shutil
 import logging
 from pathlib import Path
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from typing import Optional, Dict, List, Any
@@ -25,7 +25,6 @@ templates = Jinja2Templates(directory="templates")
 # ---------------------------------------------------------------------------
 
 def _get_filter_options() -> Dict[str, List[str]]:
-    """Pull unique metadata values from the DB for populating filter dropdowns."""
     try:
         db = get_vector_db()
         result = db._collection.get(include=["metadatas"])
@@ -56,7 +55,7 @@ def _aggregate_library() -> List[Dict[str, Any]]:
     """
     Build a structured book list from DB metadata.
     Deduplicates by source_file, collects unique chapter titles per book.
-    This is a direct metadata query — no embedding/retrieval involved.
+    Direct metadata query — no embedding/retrieval involved.
     """
     try:
         db = get_vector_db()
@@ -77,7 +76,9 @@ def _aggregate_library() -> List[Dict[str, Any]]:
                     "file_type": meta.get("file_type", ""),
                     "source_file": meta.get("source_file", ""),
                     "page_count": meta.get("page_count"),
-
+                    # "publisher": meta.get("publisher", ""),
+                    # "publication_date": meta.get("publication_date", ""),
+                    # "language": meta.get("language", ""),
                     "chapters": set(),
                     "chunk_count": 0,
                 }
@@ -87,7 +88,6 @@ def _aggregate_library() -> List[Dict[str, Any]]:
 
             books[key]["chunk_count"] += 1
 
-        # Serialize sets to sorted lists
         for book in books.values():
             book["chapters"] = sorted(book["chapters"])
 
@@ -99,15 +99,24 @@ def _aggregate_library() -> List[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Page routes
+# Routes
 # ---------------------------------------------------------------------------
 
-
 @app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+async def home(
+    request: Request,
+    prefill_title: Optional[str] = None,
+    prefill_chapter: Optional[str] = None,
+):
     return templates.TemplateResponse(
         "index.html",
-        {"request": request, "filter_options": _get_filter_options()},
+        {
+            "request": request,
+            "filter_options": _get_filter_options(),
+            "library": _aggregate_library(),
+            "prefill_title": prefill_title,
+            "prefill_chapter": prefill_chapter,
+        },
     )
 
 
@@ -117,10 +126,8 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="No filename provided")
 
     safe_name = Path(file.filename).name
-    if not safe_name.endswith((".pdf", ".epub")):
-        raise HTTPException(
-            status_code=400, detail="Only PDF and EPUB files are supported"
-        )
+    if not safe_name.lower().endswith((".pdf", ".epub")):
+        raise HTTPException(status_code=400, detail="Only PDF and EPUB files are supported")
 
     file_location = UPLOAD_DIR / safe_name
     with open(file_location, "wb") as buffer:
@@ -135,6 +142,9 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
             "request": request,
             "message": f"Successfully ingested: {safe_name}",
             "filter_options": _get_filter_options(),
+            "library": _aggregate_library(),
+            "prefill_title": None,
+            "prefill_chapter": None,
         },
     )
 
@@ -146,6 +156,7 @@ async def search(
     author: Optional[str] = Form(None),
     file_type: Optional[str] = Form(None),
     title: Optional[str] = Form(None),
+    chapter: Optional[str] = Form(None),
 ):
     filters = {}
     if author and author != "all":
@@ -154,6 +165,8 @@ async def search(
         filters["file_type"] = file_type
     if title and title != "all":
         filters["title"] = title
+    if chapter and chapter.strip():
+        filters["chapter"] = chapter.strip()
 
     answer, sources = query_library(query, filters if filters else None)
 
@@ -166,13 +179,15 @@ async def search(
             "sources": sources,
             "active_filters": filters,
             "filter_options": _get_filter_options(),
+            "library": _aggregate_library(),
+            "prefill_title": title,
+            "prefill_chapter": chapter,
         },
     )
 
 
-
 # ---------------------------------------------------------------------------
-# JSON / debug API routes
+# JSON / debug
 # ---------------------------------------------------------------------------
 
 @app.get("/api/filters")
@@ -182,20 +197,11 @@ async def get_available_filters():
 
 @app.get("/library")
 async def get_library():
-    """
-    Structured book list with chapters, chunk counts, and metadata.
-    Aggregated directly from DB — no LLM involved.
-    """
     return _aggregate_library()
 
 
 @app.get("/debug/search")
 async def debug_search(q: str, k: int = 5):
-    """
-    Exposes raw retrieval results for a query.
-    Use this to verify that similarity search returns relevant chunks
-    before diagnosing LLM output quality.
-    """
     db = get_vector_db()
     docs = db.similarity_search(q, k=k)
     return [
@@ -207,6 +213,7 @@ async def debug_search(q: str, k: int = 5):
         }
         for i, doc in enumerate(docs)
     ]
+
 
 if __name__ == "__main__":
     import uvicorn
