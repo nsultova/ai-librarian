@@ -88,3 +88,24 @@ python -m src.test_models rag  # run one test
 
 Embedding: https://huggingface.co/intfloat/e5-small-v2
 LLM: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
+
+
+
+
+##### Various tests
+
+
+`python -m src.test_models` - run all tests
+`python -m src.test_models rag`  - run one test
+
+
+`curl http://localhost:8000/library` — should show your books with chapters populated
+`curl "http://localhost:8000/debug/search?q=what+happens+in+the+first+chapter"` — inspect whether retrieved chunks are semantically relevant and whether metadata looks clean
+
+**Test UI-DEMO**
+Determine if it's your cache that must be cleaned or sth more serious
+
+`python -m http.server 8080`
+
+navigate to
+`http://127.0.0.1:8080/templates/preview.html`
