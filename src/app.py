@@ -2,16 +2,15 @@ import shutil
 import logging
 from pathlib import Path
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Any
 
 from src.config import UPLOAD_DIR
 from src.ingest import chunk_file
 from src.vector import add_documents_to_db, get_vector_db
 from src.rag import query_library
-
 
 logger = logging.getLogger(__name__)
 
@@ -21,16 +20,12 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _get_filter_options() -> Dict[str, List[str]]:
-    """
-    Pull unique metadata values from the DB for populating filter dropdowns.
-    Returns empty lists if the DB is empty or unavailable.
-    
-    Note:
-    Called every time a page is rendered, which means every request hits the DB
-    — fine for local PoC but not beyond
-    
-    """
+    """Pull unique metadata values from the DB for populating filter dropdowns."""
     try:
         db = get_vector_db()
         result = db._collection.get(include=["metadatas"])
@@ -39,7 +34,6 @@ def _get_filter_options() -> Dict[str, List[str]]:
             return {"authors": [], "file_types": [], "titles": []}
 
         authors, file_types, titles = set(), set(), set()
-
         for meta in result["metadatas"]:
             if meta.get("author") and meta["author"] != "Unknown":
                 authors.add(meta["author"])
@@ -56,6 +50,57 @@ def _get_filter_options() -> Dict[str, List[str]]:
     except Exception as e:
         logger.error(f"Failed to fetch filter options: {e}")
         return {"authors": [], "file_types": [], "titles": []}
+
+
+def _aggregate_library() -> List[Dict[str, Any]]:
+    """
+    Build a structured book list from DB metadata.
+    Deduplicates by source_file, collects unique chapter titles per book.
+    This is a direct metadata query — no embedding/retrieval involved.
+    """
+    try:
+        db = get_vector_db()
+        result = db._collection.get(include=["metadatas"])
+
+        if not result or not result["metadatas"]:
+            return []
+
+        books: Dict[str, Dict[str, Any]] = {}
+
+        for meta in result["metadatas"]:
+            key = str(meta.get("source_file") or meta.get("title") or "unknown")
+
+            if key not in books:
+                books[key] = {
+                    "title": meta.get("title", "Unknown"),
+                    "author": meta.get("author", "Unknown"),
+                    "file_type": meta.get("file_type", ""),
+                    "source_file": meta.get("source_file", ""),
+                    "page_count": meta.get("page_count"),
+
+                    "chapters": set(),
+                    "chunk_count": 0,
+                }
+
+            if meta.get("chapter"):
+                books[key]["chapters"].add(meta["chapter"])
+
+            books[key]["chunk_count"] += 1
+
+        # Serialize sets to sorted lists
+        for book in books.values():
+            book["chapters"] = sorted(book["chapters"])
+
+        return sorted(books.values(), key=lambda b: b["title"].lower())
+
+    except Exception as e:
+        logger.error(f"Failed to aggregate library: {e}")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Page routes
+# ---------------------------------------------------------------------------
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -125,11 +170,43 @@ async def search(
     )
 
 
+
+# ---------------------------------------------------------------------------
+# JSON / debug API routes
+# ---------------------------------------------------------------------------
+
 @app.get("/api/filters")
 async def get_available_filters():
-    """JSON endpoint — kept for debugging/external use."""
     return _get_filter_options()
 
+
+@app.get("/library")
+async def get_library():
+    """
+    Structured book list with chapters, chunk counts, and metadata.
+    Aggregated directly from DB — no LLM involved.
+    """
+    return _aggregate_library()
+
+
+@app.get("/debug/search")
+async def debug_search(q: str, k: int = 5):
+    """
+    Exposes raw retrieval results for a query.
+    Use this to verify that similarity search returns relevant chunks
+    before diagnosing LLM output quality.
+    """
+    db = get_vector_db()
+    docs = db.similarity_search(q, k=k)
+    return [
+        {
+            "rank": i + 1,
+            "metadata": doc.metadata,
+            "preview": doc.page_content[:300],
+            "length": len(doc.page_content),
+        }
+        for i, doc in enumerate(docs)
+    ]
 
 if __name__ == "__main__":
     import uvicorn
