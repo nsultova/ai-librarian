@@ -36,23 +36,55 @@ def _sanitize_list(items: List[Any], max_length: int = 256) -> List[str]:
 # PDF
 # ---------------------------------------------------------------------------
 
-def _walk_pdf_outline(outline: list) -> List[str]:
+def _walk_pdf_outline(outline: list, reader: "PyPDF2.PdfReader") -> List[tuple]:
     """
-    Recursively walk the PDF outline/bookmark tree and collect titles.
+    Recursively walk the PDF outline/bookmark tree.
+    Returns list of (page_index, title) tuples, sorted by page order.
     PyPDF2 outline entries are either Destination objects or nested lists.
     """
-    titles = []
+    entries = []
     for item in outline:
         if isinstance(item, list):
-            titles.extend(_walk_pdf_outline(item))
+            entries.extend(_walk_pdf_outline(item, reader))
         else:
             try:
                 title = _sanitize(item.title, max_length=256)
-                if title:
-                    titles.append(title)
-            except AttributeError:
+                if not title:
+                    continue
+                page_idx = reader.get_destination_page_number(item)
+                entries.append((page_idx, title))
+            except Exception:
                 pass
-    return titles
+    return entries
+
+
+def build_page_chapter_map(outline_entries: List[tuple]) -> Dict[int, str]:
+    """
+    Given sorted (page_idx, title) pairs, build a map of:
+        page_number -> chapter title
+
+    Each page belongs to the chapter whose bookmark is at or before that page.
+    This is a step function — chapter changes at each bookmark's page.
+    """
+    if not outline_entries:
+        return {}
+
+    sorted_entries = sorted(outline_entries, key=lambda x: x[0])
+    return {page: title for page, title in sorted_entries}
+
+
+def chapter_for_page(page_idx: int, page_chapter_map: Dict[int, str]) -> str:
+    """
+    Return the chapter title for a given page index using the step-function map.
+    Finds the largest bookmark page_idx <= page_idx.
+    """
+    if not page_chapter_map:
+        return ""
+    # Walk backwards through sorted keys to find the last chapter start <= page
+    for bookmark_page in sorted(page_chapter_map.keys(), reverse=True):
+        if page_idx >= bookmark_page:
+            return page_chapter_map[bookmark_page]
+    return ""
 
 
 def extract_pdf_metadata(file_path: str) -> Dict[str, Any]:
@@ -65,14 +97,17 @@ def extract_pdf_metadata(file_path: str) -> Dict[str, Any]:
             title = _sanitize(info.get("/Title"), fallback=Path(file_path).stem)
             author = _sanitize(info.get("/Author"), fallback="Unknown")
 
-            chapters = _walk_pdf_outline(reader.outline) if reader.outline else []
+            outline_entries = _walk_pdf_outline(reader.outline, reader) if reader.outline else []
+            chapter_titles = [t for _, t in sorted(outline_entries, key=lambda x: x[0])]
+            page_chapter_map = build_page_chapter_map(outline_entries)
 
             return {
                 "title": title,
                 "author": author,
                 "page_count": len(reader.pages),
-                "chapters": chapters,        # list of chapter title strings
-                "has_outline": bool(chapters),
+                "chapters": chapter_titles,          # ordered list for /library
+                "page_chapter_map": page_chapter_map, # page_idx -> chapter, used at ingest
+                "has_outline": bool(outline_entries),
             }
     except Exception as e:
         logger.warning(f"Failed to extract PDF metadata from {file_path}: {e}")

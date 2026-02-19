@@ -4,7 +4,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from src.config import CHUNK_SIZE, CHUNK_OVERLAP
-from src.metadata import get_file_metadata, extract_epub_chapter_title, _sanitize_spine_name
+from src.metadata import get_file_metadata, extract_epub_chapter_title, _sanitize_spine_name, chapter_for_page
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -79,13 +79,11 @@ def chunk_file(file_path: str) -> List[Document]:
     file_metadata = get_file_metadata(file_path)
     logger.info(f"Extracted metadata: {file_metadata}")
 
-    # chapters from PDF outline are stored at file level, not per-chunk
-    # We pop it here to avoid storing a list in ChromaDB (it only accepts scalar values)
-    # Extract chapters list → store separately in memory
-    # Remove it from metadata → keep only scalars for ChromaDB
-    # If the key doesn't exist (e.g., EPUB file), use the fallback ([] or None)
-    
-    pdf_chapters = file_metadata.pop("chapters", [])
+    # Pop non-scalar fields — ChromaDB only accepts scalar metadata values per chunk.
+    # chapters list is only used for /library aggregation (via _aggregate_library).
+    # page_chapter_map is used below to annotate each PDF chunk with its chapter, then discarded.
+    file_metadata.pop("chapters", None)
+    page_chapter_map: dict = file_metadata.pop("page_chapter_map", {})
     file_metadata.pop("has_outline", None)
 
     logger.info("Cleaning text...")
@@ -94,8 +92,12 @@ def chunk_file(file_path: str) -> List[Document]:
         doc.metadata.update(file_metadata)
         doc.metadata["chunk_index"] = idx
 
-        # For PDFs: annotate chunk with nearest chapter from outline if available
-        # (page_number comes from PyPDFLoader automatically as metadata['page'])
+        # For PDFs: assign chapter per page using the outline's step-function map.
+        # PyPDFLoader sets metadata['page'] as a 0-indexed int automatically.
+        if page_chapter_map and "page" in doc.metadata:
+            ch = chapter_for_page(int(doc.metadata["page"]), page_chapter_map)
+            if ch:
+                doc.metadata["chapter"] = ch
 
     logger.info(f"Cleaned {len(raw_docs)} sections")
 
