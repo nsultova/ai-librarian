@@ -79,6 +79,9 @@ python -m src.test_models rag  # run one test
 * add pagination(?)
 * Real-time Progress Streaming (Server-Sent Events)
     * ..if I ever do sthsth-scaling/multi-user/big files
+* queries all metadata from DB directly (no LLM)
+* collects unique chapters per book into a sorted list (no LLM)
+* add summarization of each book to metadata
 
 
 ##### MODELS USED
