@@ -52,9 +52,6 @@ def _load_documents(file_path: str) -> List[Document]:
 
     EPUB: load_epub() produces one Document per spine item (chapter).
           Each document's metadata includes 'chapter' (str), set by us.
-
-    No cleaning or metadata enrichment is done here — this step only
-    concerns itself with reading the file into Document objects.
     """
     ext = Path(file_path).suffix.lower()
 
@@ -131,14 +128,14 @@ def _annotate_documents(
     Two things happen here:
 
     1. Scalar metadata (title, author, file_type, etc.) from meta.to_chunk_metadata()
-       is written to every document. This is what makes ChromaDB filtering work —
-       every chunk carries its book's metadata so queries can be scoped by author,
+       is written to every document. This is what is needed for ChromaDB filtering to work —
+       every chunk carries its parents documents metadata so queries can be scoped by author,
        title, chapter, etc.
 
     2. For PDFs: chapter labels are assigned using the outline's step-function map
        (page_chapter_map). PyPDFLoader sets doc.metadata['page'] as a 0-indexed int.
        chapter_for_page() walks the map to find which chapter that page belongs to.
-       EPUBs already have chapter set in _load_epub(), so this step is a no-op for them.
+       EPUBs already have chapter set in _load_epub(), so this step is unnecessary for them.
 
     chunk_index is set to preserve the original document order after splitting,
     since RecursiveCharacterTextSplitter does not guarantee order across docs.
