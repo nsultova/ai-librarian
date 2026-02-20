@@ -29,7 +29,10 @@ ai-librarian/
 └── requirements.txt
 ```
 
- ![Workflow](/img/basic_RAG_white_background.png)
+**Dataflow**
+`upload → ingest → embed → store → retrieve → generate`
+
+ ![Dataflow](/img/basic_RAG_white_background.png)
 
 #### For Archlinux
 
