@@ -1,5 +1,7 @@
 from pathlib import Path
 from typing import Dict, Any, List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 import re
 import logging
 
@@ -7,6 +9,52 @@ import PyPDF2
 from ebooklib import epub
 
 logger = logging.getLogger(__name__)
+
+
+
+@dataclass
+class DocumentMetadata:
+    """
+    Structured metadata extracted from an ingested document.
+
+    Separates two categories of fields:
+        Scalar fields  — safe to store per-chunk in ChromaDB (str, int, float).
+                         These become filterable metadata on every chunk.
+        Derived fields — used during ingestion processing but NOT stored
+                         per-chunk. chapters is used by /library aggregation
+                         (reconstructed from chunk metadata at query time).
+                         page_chapter_map is used to annotate PDF chunks
+                         during ingest, then discarded.
+
+    to_chunk_metadata() makes the ChromaDB-safe contract explicit, replacing
+    the previous pattern of popping non-scalar keys from a plain dict —
+    which was fragile because adding a new field to get_file_metadata()
+    could silently break ingestion.
+    """
+    # -- Scalar: stored on every chunk in ChromaDB --
+    title:       str
+    author:      str
+    file_type:   str
+    source_file: str
+    page_count:  Optional[int] = None
+
+    # -- Derived: used during ingest, not stored per-chunk --
+    chapters:         List[str]       = field(default_factory=list)
+    page_chapter_map: Dict[int, str]  = field(default_factory=dict)
+
+    def to_chunk_metadata(self) -> Dict:
+        """
+        Return only the scalar fields safe for ChromaDB chunk metadata.
+        Called once per document during ingestion to stamp every chunk.
+        """
+        return {
+            "title":       self.title,
+            "author":      self.author,
+            "file_type":   self.file_type,
+            "source_file": self.source_file,
+            "page_count":  self.page_count,
+        }
+
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +212,7 @@ def extract_epub_chapter_title(soup) -> Optional[str]:
     return None
 
 
-def _sanitize_spine_name(raw: str) -> str:
+def sanitize_spine_name(raw: str) -> str:
     """
     Turn an internal spine path like 'Text/part01_chapter03.xhtml'
     into something readable like 'part01 chapter03'.
@@ -187,19 +235,23 @@ def _fallback_metadata(file_path: str) -> Dict[str, Any]:
     }
 
 
-def get_file_metadata(file_path: str) -> Dict[str, Any]:
-    """Main entry point. Returns a flat metadata dict for a given file."""
+def get_file_metadata(file_path: str) -> DocumentMetadata:
+    """Main entry point. Returns structured metadata for a given file."""
     ext = Path(file_path).suffix.lower()
 
     if ext == ".pdf":
-        metadata = extract_pdf_metadata(file_path)
+        raw = extract_pdf_metadata(file_path)
     elif ext == ".epub":
-        metadata = extract_epub_metadata(file_path)
+        raw = extract_epub_metadata(file_path)
     else:
-        metadata = _fallback_metadata(file_path)
+        raw = _fallback_metadata(file_path)
 
-    # Common fields always present
-    metadata["file_type"] = ext.lstrip(".")
-    metadata["source_file"] = Path(file_path).name
-
-    return metadata
+    return DocumentMetadata(
+        title=raw.get("title", Path(file_path).stem),
+        author=raw.get("author", "Unknown"),
+        file_type=ext.lstrip("."),
+        source_file=Path(file_path).name,
+        page_count=raw.get("page_count"),
+        chapters=raw.get("chapters", []),
+        page_chapter_map=raw.get("page_chapter_map", {}),
+    )

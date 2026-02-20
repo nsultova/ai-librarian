@@ -1,34 +1,95 @@
-import re
-from typing import List
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-from src.config import CHUNK_SIZE, CHUNK_OVERLAP
-from src.metadata import get_file_metadata, extract_epub_chapter_title, _sanitize_spine_name, chapter_for_page
-import logging
+"""
+ingest.py — document loading, cleaning, annotation, and chunking.
 
-logging.basicConfig(level=logging.INFO)
+Pipeline (called from app.py via chunk_file):
+
+    file on disk
+        -> _load_documents()      load PDF or EPUB into raw Document list
+        -> _annotate_documents()  attach file metadata + chapter labels to each doc
+        -> _split_documents()     split docs into fixed-size overlapping chunks
+
+The output is a list of LangChain Document objects ready to be embedded
+and stored in ChromaDB by vector.add_documents_to_db().
+
+Chunking strategy:
+    Each chunk is CHUNK_SIZE characters with CHUNK_OVERLAP characters of
+    overlap with its neighbors. Overlap ensures that sentences spanning a
+    chunk boundary appear in both chunks — so a query matching that sentence
+    will retrieve at least one chunk containing it in (hopefully) full context.
+"""
+
+import logging
+from pathlib import Path
+from typing import List
+
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from src.config import CHUNK_OVERLAP, CHUNK_SIZE
+from src.metadata import (
+    DocumentMetadata,
+    extract_epub_chapter_title,
+    get_file_metadata,
+    sanitize_spine_name,
+    chapter_for_page,
+)
+from src.utils import clean_text
+
 logger = logging.getLogger(__name__)
 
 
-def clean_txt(txt: str) -> str:
-    # Rejoin hyphenated line-breaks: impor-\ntant -> important
-    txt = re.sub(r"-\n", "", txt)
-    # Collapse whitespace
-    txt = re.sub(r"\s+", " ", txt)
-    return txt.strip()
+# ---------------------------------------------------------------------------
+# Internal pipeline steps
+# ---------------------------------------------------------------------------
+
+def _load_documents(file_path: str) -> List[Document]:
+    """
+    Load a PDF or EPUB file into a list of raw Document objects.
+
+    PDF:  PyPDFLoader produces one Document per page. Each document's
+          metadata includes 'page' (0-indexed int), set by LangChain.
+
+    EPUB: load_epub() produces one Document per spine item (chapter).
+          Each document's metadata includes 'chapter' (str), set by us.
+
+    No cleaning or metadata enrichment is done here — this step only
+    concerns itself with reading the file into Document objects.
+    """
+    ext = Path(file_path).suffix.lower()
+
+    if ext == ".pdf":
+        logger.info("Loading PDF...")
+        return PyPDFLoader(file_path).load()
+
+    if ext == ".epub":
+        logger.info("Loading EPUB...")
+        return _load_epub(file_path)
+
+    raise ValueError(
+        f"Unsupported file format: '{ext}'. Supported formats: .pdf, .epub"
+    )
 
 
-def load_epub(file_path: str) -> List[Document]:
+def _load_epub(file_path: str) -> List[Document]:
     """
     Load an EPUB using ebooklib + BeautifulSoup.
-    Each spine item (chapter) becomes one Document.
-    Chapter title is extracted from HTML headings where possible,
-    falling back to a sanitized version of the internal spine filename.
+
+    EPUB files are ZIP archives containing HTML spine items — one per
+    chapter or section. We iterate the spine in order, parse each item's
+    HTML, extract a human-readable chapter title, and convert to plain text.
+
+    Nav/TOC items (containing a <nav> tag) are skipped — they are structural
+    metadata, not readable content.
+
+    Chapter title resolution order:
+        1. First heading tag found (h1 > h2 > h3 > h4)
+        2. <title> tag of the HTML item
+        3. Sanitized internal spine filename (e.g. 'Text/ch03.xhtml' -> 'ch03')
     """
     import ebooklib
-    from ebooklib import epub
     from bs4 import BeautifulSoup
+    from ebooklib import epub
 
     book = epub.read_epub(file_path)
     docs = []
@@ -36,24 +97,22 @@ def load_epub(file_path: str) -> List[Document]:
     for item in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
         soup = BeautifulSoup(item.get_content(), "html.parser")
 
-        # Drop nav/TOC items — structural, not content
         if soup.find("nav"):
-            continue
+            continue  # skip structural nav/TOC items
 
-        # Prefer a heading-derived title; fall back to sanitized spine name
-        chapter_title = extract_epub_chapter_title(soup)
-        if not chapter_title:
-            chapter_title = _sanitize_spine_name(item.get_name())
+        chapter_title = (
+            extract_epub_chapter_title(soup)
+            or sanitize_spine_name(item.get_name())
+        )
 
-        text = soup.get_text(separator="\n")
-        text = clean_txt(text)
+        text = clean_text(soup.get_text(separator="\n"))
         if not text:
             continue
 
         docs.append(Document(
             page_content=text,
             metadata={
-                "source": file_path,
+                "source":  file_path,
                 "chapter": chapter_title,
             },
         ))
@@ -62,53 +121,109 @@ def load_epub(file_path: str) -> List[Document]:
     return docs
 
 
-def chunk_file(file_path: str) -> List[Document]:
-    logger.info(f"Starting ingestion: {file_path}")
-    ext = file_path.rsplit(".", 1)[-1].lower()
+def _annotate_documents(
+    docs: List[Document],
+    meta: DocumentMetadata,
+) -> List[Document]:
+    """
+    Stamp each Document with file-level metadata and chapter labels.
 
-    logger.info(f"Loading {ext.upper()} file...")
-    if ext == "pdf":
-        loader = PyPDFLoader(file_path)
-        raw_docs = loader.load()
-    elif ext == "epub":
-        raw_docs = load_epub(file_path)
-    else:
-        raise ValueError(f"Unsupported file format: {ext}")
+    Two things happen here:
 
-    logger.info("Extracting metadata...")
-    file_metadata = get_file_metadata(file_path)
-    logger.info(f"Extracted metadata: {file_metadata}")
+    1. Scalar metadata (title, author, file_type, etc.) from meta.to_chunk_metadata()
+       is written to every document. This is what makes ChromaDB filtering work —
+       every chunk carries its book's metadata so queries can be scoped by author,
+       title, chapter, etc.
 
-    # Pop non-scalar fields — ChromaDB only accepts scalar metadata values per chunk.
-    # chapters list is only used for /library aggregation (via _aggregate_library).
-    # page_chapter_map is used below to annotate each PDF chunk with its chapter, then discarded.
-    file_metadata.pop("chapters", None)
-    page_chapter_map: dict = file_metadata.pop("page_chapter_map", {})
-    file_metadata.pop("has_outline", None)
+    2. For PDFs: chapter labels are assigned using the outline's step-function map
+       (page_chapter_map). PyPDFLoader sets doc.metadata['page'] as a 0-indexed int.
+       chapter_for_page() walks the map to find which chapter that page belongs to.
+       EPUBs already have chapter set in _load_epub(), so this step is a no-op for them.
 
-    logger.info("Cleaning text...")
-    for idx, doc in enumerate(raw_docs):
-        doc.page_content = clean_txt(doc.page_content)
-        doc.metadata.update(file_metadata)
+    chunk_index is set to preserve the original document order after splitting,
+    since RecursiveCharacterTextSplitter does not guarantee order across docs.
+    """
+    chunk_metadata = meta.to_chunk_metadata()
+
+    for idx, doc in enumerate(docs):
+        doc.page_content = clean_text(doc.page_content)
+        doc.metadata.update(chunk_metadata)
         doc.metadata["chunk_index"] = idx
 
-        # For PDFs: assign chapter per page using the outline's step-function map.
-        # PyPDFLoader sets metadata['page'] as a 0-indexed int automatically.
-        if page_chapter_map and "page" in doc.metadata:
-            ch = chapter_for_page(int(doc.metadata["page"]), page_chapter_map)
-            if ch:
-                doc.metadata["chapter"] = ch
+        if meta.page_chapter_map and "page" in doc.metadata:
+            chapter = chapter_for_page(
+                int(doc.metadata["page"]),
+                meta.page_chapter_map,
+            )
+            if chapter:
+                doc.metadata["chapter"] = chapter
 
-    logger.info(f"Cleaned {len(raw_docs)} sections")
+    logger.info(f"Annotated {len(docs)} documents with metadata")
+    return docs
 
-    logger.info(f"Chunking (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})...")
+
+def _split_documents(docs: List[Document]) -> List[Document]:
+    """
+    Split annotated documents into fixed-size overlapping chunks.
+
+    RecursiveCharacterTextSplitter tries each separator in order,
+    preferring to split at paragraph breaks before sentence breaks
+    before word breaks — preserving as much semantic unit integrity
+    as possible within the chunk size constraint.
+
+    Separator priority:
+        "\\n\\n"  paragraph break  (most preferred)
+        "\\n"     line break
+        ". "      sentence end
+        " "       word boundary
+        ""        character boundary (last resort)
+
+    Overlap (CHUNK_OVERLAP chars) ensures context continuity — sentences
+    near chunk boundaries appear in both neighboring chunks, so a query
+    matching that sentence will retrieve a chunk with full surrounding context.
+    """
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
         separators=["\n\n", "\n", ". ", " ", ""],
     )
+    chunks = splitter.split_documents(docs)
+    logger.info(
+        f"Split {len(docs)} documents into {len(chunks)} chunks "
+        f"(size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})"
+    )
+    return chunks
 
-    chunks = splitter.split_documents(raw_docs)
-    logger.info(f"Created {len(chunks)} chunks from {file_metadata.get('title', 'Unknown')}")
 
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+def chunk_file(file_path: str) -> List[Document]:
+    """
+    Full ingestion pipeline for a single PDF or EPUB file.
+
+    Orchestrates three steps:
+        1. Load   — read file into raw Document list
+        2. Annotate — clean text, attach metadata and chapter labels
+        3. Split  — chunk into overlapping fixed-size segments
+
+    Returns a list of Document objects ready to be embedded and stored
+    in ChromaDB by vector.add_documents_to_db().
+
+    Raises:
+        ValueError if the file format is not supported.
+        Any exception from the underlying loaders propagates — callers
+        (app.py) are responsible for handling ingestion errors.
+    """
+    logger.info(f"Starting ingestion: {file_path}")
+
+    meta   = get_file_metadata(file_path)
+    logger.info(f"Metadata: title='{meta.title}', author='{meta.author}', type={meta.file_type}")
+
+    docs   = _load_documents(file_path)
+    docs   = _annotate_documents(docs, meta)
+    chunks = _split_documents(docs)
+
+    logger.info(f"Ingestion complete: {len(chunks)} chunks from '{meta.title}'")
     return chunks
