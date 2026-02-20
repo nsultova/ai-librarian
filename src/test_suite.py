@@ -278,11 +278,12 @@ def test_app_routes():
             )
             print("  GET /api/filters returns correct shape")
 
-            # -- Upload: no filename --
             print("\nPOST /upload — no filename")
             r = client.post("/upload", files={"file": ("", b"", "application/pdf")})
-            assert r.status_code == 400, f"Expected 400, got {r.status_code}"
-            print("  Correctly rejected: no filename")
+            assert r.status_code in (400, 422), f"Expected 400 or 422, got {r.status_code}"
+            # 400 = our handler rejected it (file.filename is empty string)
+            # 422 = FastAPI's validation layer rejected it before reaching the handler
+            print(f"  Correctly rejected: no filename ({r.status_code})")
 
             # -- Upload: wrong format --
             print("\nPOST /upload — wrong format")
