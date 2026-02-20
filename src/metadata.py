@@ -1,16 +1,29 @@
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional
-import re
+"""
+metadata.py — document metadata extraction and structured representation.
+
+Handles PDF (via PyPDF2) and EPUB (via ebooklib) formats.
+Provides DocumentMetadata, a dataclass that separates ChromaDB-safe scalar
+fields from derived fields used only during ingestion.
+
+Public interface:
+    get_file_metadata(file_path)      -> DocumentMetadata
+    extract_epub_chapter_title(soup)  -> Optional[str]
+    sanitize_spine_name(raw)          -> str
+    chapter_for_page(idx, map)        -> str
+    build_page_chapter_map(entries)   -> Dict[int, str]
+"""
+
 import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import PyPDF2
 from ebooklib import epub
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
 
 @dataclass
 class DocumentMetadata:
@@ -74,10 +87,6 @@ def _sanitize(value: Any, max_length: int = 512, fallback: str = "") -> str:
     text = re.sub(r"\s+", " ", text).strip()
     text = text[:max_length]
     return text or fallback
-
-
-def _sanitize_list(items: List[Any], max_length: int = 256) -> List[str]:
-    return [s for s in (_sanitize(i, max_length) for i in items) if s]
 
 
 # ---------------------------------------------------------------------------
@@ -228,13 +237,17 @@ def sanitize_spine_name(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _fallback_metadata(file_path: str) -> Dict[str, Any]:
+    """
+    Minimal metadata for files where extraction failed or format is unsupported.
+    """
     return {
-        "title": Path(file_path).stem,
-        "author": "Unknown",
-        "source_file": Path(file_path).name,
+        "title":    Path(file_path).stem,
+        "author":   "Unknown",
+        "page_count": None,
+        "chapters": [],
+        "page_chapter_map": {},
     }
-
-
+    
 def get_file_metadata(file_path: str) -> DocumentMetadata:
     """Main entry point. Returns structured metadata for a given file."""
     ext = Path(file_path).suffix.lower()
