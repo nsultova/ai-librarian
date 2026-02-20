@@ -68,6 +68,15 @@ def test_vector_db_singleton_and_reset():
     print("=" * 60)
     print("TESTING VECTOR DB SINGLETON AND RESET")
     print("=" * 60)
+    
+    confirm = input(
+        "This test will DELETE the database. Continue? (yes/no): "
+    )
+    
+    if confirm.lower() != "yes": # NOT yes 
+        print("Skipped.")
+        return True  # not a failure, just skipped
+        
 
     try:
         import src.vector as vector_module
