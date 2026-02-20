@@ -583,11 +583,12 @@ def test_embedding():
 
 def test_rag():
     """
-    Verifies the RAG pipeline end-to-end: prompt rendering and LLM response.
+    Verifies the RAG pipeline end-to-end via query_library().
 
     Requires Ollama to be running locally with the configured model pulled.
-    Does not require ingested documents — uses a hardcoded context string
-    to isolate the LLM call from the retrieval step.
+    Uses a hardcoded context string injected directly via _generate() to
+    isolate the LLM call from the retrieval step — we're testing that the
+    LLM responds sensibly, not that ChromaDB returns good results.
 
     If Ollama is not running:
         ollama serve
@@ -598,32 +599,24 @@ def test_rag():
     print("=" * 60)
 
     try:
-        from langchain_core.output_parsers import StrOutputParser
-        from langchain_core.prompts import ChatPromptTemplate
-        from langchain_ollama import ChatOllama
+        from src.rag import PROMPT_TEMPLATE, _generate
 
-        from src.config import LLM_MODEL
-        from src.rag import PROMPT_TEMPLATE
+        # -- Prompt template has required variables --
+        print("\nChecking prompt template variables...")
+        assert "{context}"  in PROMPT_TEMPLATE, "PROMPT_TEMPLATE missing {context}"
+        assert "{question}" in PROMPT_TEMPLATE, "PROMPT_TEMPLATE missing {question}"
+        print("  PROMPT_TEMPLATE contains {context} and {question}")
 
-        print("\nChecking prompt template renders correctly...")
-        prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
-        rendered = prompt.format(
+        # -- LLM responds with a non-empty string --
+        # We call _generate directly with a known context rather than going
+        # through retrieval — this tests the generation step in isolation.
+        print(f"\nCalling _generate (requires Ollama)...")
+        answer = _generate(
             context="The sky is blue because of Rayleigh scattering.",
-            question="Why is the sky blue?"
+            question="Why is the sky blue?",
         )
-        assert "{context}" not in rendered, "context variable was not injected"
-        assert "{question}" not in rendered, "question variable was not injected"
-        print("  Prompt template renders correctly")
 
-        print(f"\nCalling Ollama (model: {LLM_MODEL})...")
-        llm = ChatOllama(model=LLM_MODEL)
-        chain = prompt | llm | StrOutputParser()
-        answer = chain.invoke({
-            "context":  "The sky is blue because of Rayleigh scattering.",
-            "question": "Why is the sky blue?",
-        })
-
-        assert isinstance(answer, str), "Answer is not a string"
+        assert isinstance(answer, str), f"Expected str, got {type(answer)}"
         assert len(answer.strip()) > 0, "Answer is empty"
         print(f"  Response received ({len(answer)} chars)")
         print(f"  Preview: {answer[:200]}")
@@ -640,7 +633,125 @@ def test_rag():
         traceback.print_exc()
         return False
 
+def test_rag_pure():
+    """
+    Tests the pure helper functions in rag.py.
 
+    These functions contain real logic but have no external dependencies —
+    no DB, no embedding model, no Ollama required. They belong in the fast
+    section alongside test_metadata and test_utils.
+
+    Functions covered:
+        _build_chroma_filter  — translates plain dicts to ChromaDB syntax
+        _build_context        — formats retrieved docs into a prompt context string
+        _build_sources        — extracts and deduplicates source labels from docs
+    """
+    print("=" * 60)
+    print("TESTING RAG PURE FUNCTIONS")
+    print("=" * 60)
+
+    try:
+        from langchain_core.documents import Document
+        from src.rag import _build_chroma_filter, _build_context, _build_sources
+
+        # -- _build_chroma_filter --
+        # ChromaDB cannot do plain equality — every comparison needs an
+        # explicit $eq operator. Single vs. multiple conditions produce
+        # different structures, both tested here.
+        print("\n_build_chroma_filter")
+
+        result = _build_chroma_filter({"author": "Borges"})
+        assert result == {"author": {"$eq": "Borges"}}, f"Got: {result}"
+        print("  Single field -> plain $eq dict (no $and wrapper)")
+
+        result = _build_chroma_filter({"author": "Borges", "title": "Labyrinths"})
+        conditions = result["$and"]
+        assert {"author": {"$eq": "Borges"}} in conditions
+        assert {"title":  {"$eq": "Labyrinths"}} in conditions
+        assert len(conditions) == 2
+        print("  Multiple fields -> $and list of $eq dicts")
+
+        # -- _build_context --
+        # Each chunk should be prefixed with [Title by Author] on its own line,
+        # chunks separated by double newlines so the LLM sees them as distinct
+        # passages. Empty input should return an empty string cleanly.
+        print("\n_build_context")
+
+        docs = [
+            Document(
+                page_content="The library is infinite.",
+                metadata={"title": "Labyrinths", "author": "Borges"},
+            ),
+            Document(
+                page_content="The rose has no why.",
+                metadata={"title": "The Name of the Rose", "author": "Eco"},
+            ),
+        ]
+        context = _build_context(docs)
+
+        assert "[Labyrinths by Borges]" in context, (
+            "Source attribution for first doc missing from context"
+        )
+        assert "The library is infinite." in context
+        print("  First doc formatted with attribution and content")
+
+        assert "[The Name of the Rose by Eco]" in context
+        assert "The rose has no why." in context
+        print("  Second doc formatted with attribution and content")
+
+        assert "\n\n" in context, (
+            "Chunks should be separated by double newlines so the LLM "
+            "sees them as distinct passages."
+        )
+        print("  Chunks separated by double newlines")
+
+        assert _build_context([]) == "", (
+            "_build_context([]) should return empty string, not crash."
+        )
+        print("  Empty docs list returns empty string")
+
+        # Missing metadata should fall back gracefully, not KeyError
+        docs_no_meta = [Document(page_content="Some text.", metadata={})]
+        context_no_meta = _build_context(docs_no_meta)
+        assert "[Unknown by Unknown]" in context_no_meta
+        print("  Missing metadata falls back to 'Unknown' without crashing")
+
+        # -- _build_sources --
+        # Sources should be deduplicated — two chunks from the same book
+        # should produce only one source entry in the UI.
+        print("\n_build_sources")
+
+        docs = [
+            Document(page_content="chunk 1", metadata={"title": "Labyrinths", "author": "Borges"}),
+            Document(page_content="chunk 2", metadata={"title": "Labyrinths", "author": "Borges"}),
+            Document(page_content="chunk 3", metadata={"title": "Ficciones",  "author": "Borges"}),
+        ]
+        sources = _build_sources(docs)
+
+        assert len(sources) == 2, (
+            f"Expected 2 deduplicated sources, got {len(sources)}: {sources}"
+        )
+        assert "Labyrinths by Borges" in sources
+        assert "Ficciones by Borges" in sources
+        print("  Two chunks from same book deduplicated to one source entry")
+
+        assert _build_sources([]) == [], (
+            "_build_sources([]) should return empty list, not crash."
+        )
+        print("  Empty docs list returns empty list")
+
+        print("\nRAG PURE TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
+    
+    
 # ---------------------------------------------------------------------------
 # Registry and runner
 # ---------------------------------------------------------------------------
@@ -650,6 +761,7 @@ TESTS = {
     "utils":       test_utils,
     "metadata":    test_metadata,
     "ingest":      test_ingest,
+    "rag_pure":    test_rag_pure,
     # Medium — needs DB / embedding model, no LLM
     "vector":      test_vector,
     "db_metadata": test_db_metadata,
