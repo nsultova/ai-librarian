@@ -229,11 +229,104 @@ def test_metadata_retrieval():
         traceback.print_exc()
         return False
 
+def test_app_routes():
+    """
+    Tests the FastAPI routes using FastAPI's built-in test client.
+
+    The TestClient runs the full app in-process — no server needs to be
+    running. It also triggers the lifespan context manager (startup/shutdown)
+    so ensure_dirs() is called just as it would be in production.
+
+    What we verify:
+        - Core routes return expected status codes
+        - Upload validation rejects bad filenames, wrong formats, oversized files
+        - JSON endpoints return the correct shape
+        - The app handles an empty database gracefully (no crash, sensible defaults)
+    """
+    print("=" * 60)
+    print("TESTING APP ROUTES")
+    print("=" * 60)
+
+    try:
+        from fastapi.testclient import TestClient
+        from src.app import app
+
+        # TestClient handles lifespan (startup/shutdown) automatically
+        with TestClient(app) as client:
+
+            # -- Home page --
+            print("\nGET /")
+            r = client.get("/")
+            assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+            assert "text/html" in r.headers["content-type"]
+            print("  GET / returns 200 HTML")
+
+            # -- Library JSON --
+            print("\nGET /library")
+            r = client.get("/library")
+            assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+            assert isinstance(r.json(), list), "Expected a list"
+            print(f"  GET /library returns list ({len(r.json())} books)")
+
+            # -- Filter options --
+            print("\nGET /api/filters")
+            r = client.get("/api/filters")
+            assert r.status_code == 200
+            body = r.json()
+            assert "authors" in body and "file_types" in body, (
+                f"Expected 'authors' and 'file_types' keys, got: {list(body.keys())}"
+            )
+            print("  GET /api/filters returns correct shape")
+
+            # -- Upload: no filename --
+            print("\nPOST /upload — no filename")
+            r = client.post("/upload", files={"file": ("", b"", "application/pdf")})
+            assert r.status_code == 400, f"Expected 400, got {r.status_code}"
+            print("  Correctly rejected: no filename")
+
+            # -- Upload: wrong format --
+            print("\nPOST /upload — wrong format")
+            r = client.post("/upload", files={"file": ("test.txt", b"hello", "text/plain")})
+            assert r.status_code == 400, f"Expected 400, got {r.status_code}"
+            print("  Correctly rejected: unsupported format")
+
+            # -- Upload: file too large --
+            print("\nPOST /upload — oversized file")
+            from src.config import MAX_UPLOAD_BYTES
+            oversized = b"0" * (MAX_UPLOAD_BYTES + 1)
+            r = client.post("/upload", files={"file": ("big.pdf", oversized, "application/pdf")})
+            assert r.status_code == 413, f"Expected 413, got {r.status_code}"
+            print("  Correctly rejected: file too large")
+
+            # -- Search: empty database should not crash --
+            print("\nPOST /search — empty database")
+            r = client.post("/search", data={"query": "test query"})
+            # We expect either 200 (handled gracefully) or 500 only if
+            # the LLM is unreachable — not a crash from missing data.
+            # A 200 here means the app degraded gracefully.
+            assert r.status_code in (200, 500), (
+                f"Unexpected status {r.status_code} — app may have crashed"
+            )
+            print(f"  POST /search returned {r.status_code} (no unhandled crash)")
+
+        print("\nAPP ROUTES TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
+
+
 TESTS = {
     "embedding": test_embedding_model,
     "rag": test_rag_pipeline,
     "metadata": test_metadata_retrieval,
     "vector": test_vector_db_singleton_and_reset, 
+    "app" : test_app_routes
 }
 
 
