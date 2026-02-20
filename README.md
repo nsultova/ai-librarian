@@ -84,6 +84,8 @@ python -m src.test_models rag  # run one test
 * queries all metadata from DB directly (no LLM)
 * collects unique chapters per book into a sorted list (no LLM)
 * add summarization of each book to metadata
+* add summarization of chapter to be dispalyed along choice
+* remove redundancy in UI (filters)
 
 
 ##### MODELS USED
