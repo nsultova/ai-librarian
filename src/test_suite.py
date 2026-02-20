@@ -321,13 +321,318 @@ def test_app_routes():
         traceback.print_exc()
         return False
 
+def test_utils():
+    """
+    Tests for utils.clean_text.
+
+    clean_text has two jobs: rejoin hyphenated line-breaks introduced
+    by PDF extraction, and collapse all whitespace into single spaces.
+    These are tested independently and in combination.
+    """
+    print("=" * 60)
+    print("TESTING UTILS")
+    print("=" * 60)
+
+    try:
+        from src.utils import clean_text
+
+        # -- Hyphenated line-breaks --
+        result = clean_text("impor-\ntant")
+        assert result == "important", f"Expected 'important', got '{result}'"
+        print("  Hyphenated line-break rejoined correctly")
+
+        # -- Whitespace collapse --
+        result = clean_text("too   many    spaces\nand\ttabs")
+        assert result == "too many spaces and tabs", f"Got '{result}'"
+        print("  Whitespace collapsed correctly")
+
+        # -- Clean text is unchanged --
+        result = clean_text("already clean text")
+        assert result == "already clean text", f"Got '{result}'"
+        print("  Clean text passes through unchanged")
+
+        # -- Empty string --
+        result = clean_text("")
+        assert result == "", f"Expected empty string, got '{result}'"
+        print("  Empty string returns empty string")
+
+        # -- Combined: hyphen + extra whitespace --
+        result = clean_text("impor-\ntant   concept")
+        assert result == "important concept", f"Got '{result}'"
+        print("  Combined hyphen + whitespace handled correctly")
+
+        print("\nUTILS TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
+
+
+def test_metadata_pure_functions():
+    """
+    Tests for the pure utility functions in metadata.py.
+
+    These functions have no side effects and require no files —
+    they can be tested entirely with in-memory inputs. This makes
+    them the most reliable part of the test suite.
+
+    Focus is on chapter_for_page, which implements the step-function
+    logic that maps PDF page numbers to chapter titles. This is the
+    most non-obvious piece of logic in the codebase.
+    """
+    print("=" * 60)
+    print("TESTING METADATA PURE FUNCTIONS")
+    print("=" * 60)
+
+    try:
+        from src.metadata import (
+            DocumentMetadata,
+            _sanitize,
+            build_page_chapter_map,
+            chapter_for_page,
+            sanitize_spine_name,
+        )
+
+        # -- _sanitize --
+        print("\n_sanitize")
+
+        assert _sanitize(None, fallback="x") == "x"
+        print("  None returns fallback")
+
+        assert _sanitize("  hello  ") == "hello"
+        print("  Whitespace stripped")
+
+        assert _sanitize("ab\x00cd") == "ab cd"
+        print("  Control characters replaced with space")
+
+        assert _sanitize("a" * 600, max_length=10) == "a" * 10
+        print("  Long strings truncated to max_length")
+
+        assert _sanitize("", fallback="default") == "default"
+        print("  Empty string returns fallback")
+
+        # -- sanitize_spine_name --
+        print("\nsanitize_spine_name")
+
+        assert sanitize_spine_name("Text/part01_chapter03.xhtml") == "part01 chapter03"
+        print("  Path and underscores cleaned correctly")
+
+        assert sanitize_spine_name("ch-01.xhtml") == "ch 01"
+        print("  Hyphens replaced with spaces")
+
+        assert sanitize_spine_name("simple.xhtml") == "simple"
+        print("  Extension stripped")
+
+        # -- build_page_chapter_map --
+        print("\nbuild_page_chapter_map")
+
+        entries = [(5, "Chapter Two"), (0, "Chapter One"), (10, "Chapter Three")]
+        result = build_page_chapter_map(entries)
+        assert result == {0: "Chapter One", 5: "Chapter Two", 10: "Chapter Three"}
+        print("  Map built correctly from unsorted input")
+
+        assert build_page_chapter_map([]) == {}
+        print("  Empty input returns empty map")
+
+        # -- chapter_for_page: the step-function logic --
+        # Map: Chapter One starts p.0, Chapter Two starts p.5, Chapter Three p.10
+        print("\nchapter_for_page (step-function)")
+
+        page_map = {0: "Chapter One", 5: "Chapter Two", 10: "Chapter Three"}
+
+        assert chapter_for_page(0, page_map) == "Chapter One"
+        print("  Page 0 -> Chapter One (exact match on first boundary)")
+
+        assert chapter_for_page(3, page_map) == "Chapter One"
+        print("  Page 3 -> Chapter One (between boundaries)")
+
+        assert chapter_for_page(5, page_map) == "Chapter Two"
+        print("  Page 5 -> Chapter Two (exact match on boundary)")
+
+        assert chapter_for_page(7, page_map) == "Chapter Two"
+        print("  Page 7 -> Chapter Two (between boundaries)")
+
+        assert chapter_for_page(10, page_map) == "Chapter Three"
+        print("  Page 10 -> Chapter Three (last chapter)")
+
+        assert chapter_for_page(99, page_map) == "Chapter Three"
+        print("  Page 99 -> Chapter Three (beyond last boundary)")
+
+        assert chapter_for_page(0, {}) == ""
+        print("  Empty map returns empty string")
+
+        # -- DocumentMetadata.to_chunk_metadata --
+        print("\nDocumentMetadata.to_chunk_metadata")
+
+        meta = DocumentMetadata(
+            title="Test Book",
+            author="Test Author",
+            file_type="pdf",
+            source_file="test.pdf",
+            page_count=100,
+            chapters=["Ch 1", "Ch 2"],
+            page_chapter_map={0: "Ch 1", 10: "Ch 2"},
+        )
+        chunk_meta = meta.to_chunk_metadata()
+
+        # Scalar fields present
+        assert chunk_meta["title"] == "Test Book"
+        assert chunk_meta["author"] == "Test Author"
+        assert chunk_meta["file_type"] == "pdf"
+        assert chunk_meta["source_file"] == "test.pdf"
+        assert chunk_meta["page_count"] == 100
+        print("  All scalar fields present")
+
+        # Derived fields excluded
+        assert "chapters" not in chunk_meta, (
+            "'chapters' should not be in chunk metadata — it is a list "
+            "and ChromaDB does not support non-scalar metadata values."
+        )
+        assert "page_chapter_map" not in chunk_meta, (
+            "'page_chapter_map' should not be in chunk metadata."
+        )
+        print("  Derived fields correctly excluded")
+
+        print("\nMETADATA PURE FUNCTIONS TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
+
+
+def test_ingest_pipeline():
+    """
+    Tests the ingest pipeline functions using synthetic in-memory Documents.
+
+    We test _annotate_documents and _split_documents directly rather than
+    going through chunk_file, because:
+        - chunk_file requires a real file on disk
+        - these functions contain the logic worth verifying
+        - testing them independently makes failures easier to diagnose
+
+    A separate integration smoke test covers the full chunk_file pipeline
+    if a sample file is available.
+    """
+    print("=" * 60)
+    print("TESTING INGEST PIPELINE")
+    print("=" * 60)
+
+    try:
+        from langchain_core.documents import Document
+        from src.ingest import _annotate_documents, _split_documents
+        from src.metadata import DocumentMetadata
+
+        # -- _annotate_documents: metadata stamping --
+        print("\n_annotate_documents: metadata stamping")
+
+        meta = DocumentMetadata(
+            title="Test Book",
+            author="Test Author",
+            file_type="pdf",
+            source_file="test.pdf",
+            page_count=50,
+        )
+        docs = [
+            Document(page_content="First page content.", metadata={"page": 0}),
+            Document(page_content="Second page content.", metadata={"page": 1}),
+        ]
+
+        annotated = _annotate_documents(docs, meta)
+
+        assert annotated[0].metadata["title"] == "Test Book"
+        assert annotated[0].metadata["author"] == "Test Author"
+        assert annotated[1].metadata["file_type"] == "pdf"
+        print("  Scalar metadata stamped onto all documents")
+
+        assert "chapters" not in annotated[0].metadata
+        assert "page_chapter_map" not in annotated[0].metadata
+        print("  Derived fields not written to chunk metadata")
+
+        assert annotated[0].metadata["chunk_index"] == 0
+        assert annotated[1].metadata["chunk_index"] == 1
+        print("  chunk_index set correctly")
+
+        # -- _annotate_documents: chapter assignment from page map --
+        print("\n_annotate_documents: PDF chapter assignment")
+
+        meta_with_chapters = DocumentMetadata(
+            title="Test Book",
+            author="Test Author",
+            file_type="pdf",
+            source_file="test.pdf",
+            page_chapter_map={0: "Introduction", 5: "Chapter One"},
+        )
+        docs = [
+            Document(page_content="Intro text.", metadata={"page": 0}),
+            Document(page_content="Mid intro.", metadata={"page": 3}),
+            Document(page_content="Chapter content.", metadata={"page": 5}),
+        ]
+
+        annotated = _annotate_documents(docs, meta_with_chapters)
+
+        assert annotated[0].metadata["chapter"] == "Introduction"
+        assert annotated[1].metadata["chapter"] == "Introduction"
+        assert annotated[2].metadata["chapter"] == "Chapter One"
+        print("  Chapter labels assigned correctly from page map")
+
+        # -- _split_documents: chunks produced, metadata preserved --
+        print("\n_split_documents: chunking and metadata preservation")
+
+        # Create a document long enough to guarantee at least two chunks
+        long_text = "word " * 500
+        docs = [Document(
+            page_content=long_text,
+            metadata={"title": "Test Book", "chapter": "Chapter One"},
+        )]
+
+        chunks = _split_documents(docs)
+
+        assert len(chunks) > 1, (
+            f"Expected multiple chunks from {len(long_text)} chars of text, "
+            f"got {len(chunks)}. Check CHUNK_SIZE in config.py."
+        )
+        print(f"  {len(long_text)} chars split into {len(chunks)} chunks")
+
+        # Metadata must survive the split — every chunk should carry it
+        for i, chunk in enumerate(chunks):
+            assert chunk.metadata.get("title") == "Test Book", (
+                f"Chunk {i} lost its 'title' metadata after splitting."
+            )
+            assert chunk.metadata.get("chapter") == "Chapter One", (
+                f"Chunk {i} lost its 'chapter' metadata after splitting."
+            )
+        print("  Metadata preserved on all chunks after split")
+
+        print("\nINGEST PIPELINE TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
 
 TESTS = {
     "embedding": test_embedding_model,
     "rag": test_rag_pipeline,
     "metadata": test_metadata_retrieval,
+    "meta_pure": test_metadata_pure_functions,  
     "vector": test_vector_db_singleton_and_reset, 
-    "app" : test_app_routes
+    "app" : test_app_routes,
+    "utils":     test_utils,                   
+    "ingest":    test_ingest_pipeline,
 }
 
 
