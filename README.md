@@ -25,6 +25,7 @@ ai-librarian/
 │   ├── rag.py          # actual rag/llm
 |   ├── metadata.py     # preprocessing documents
 |   ├── reset_db.py     # cleanup script for ChromaDB
+|   ├── utils.py        # shared text-processing utilities
 │   └── test_suite.py   # various tests for different modules  
 └── requirements.txt
 ```
