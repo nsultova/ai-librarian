@@ -11,12 +11,6 @@ This is, for now, a mere POC to understand RAGs better. I want to turn it into s
 
 ##### Architecture
 
-- **`ingestor`**: Handles reading files (PDF/EPUB), cleaning text, and chunking
-- **`storage`**: Manages the Vector Database (ChromaDB).
-- **`engine`**: The RAG logic (Embed Query -> Retrieve -> Generate Answer)
-- **`web`**: The FastAPI UI layer (Routes + HTML Templates).
-
-
 ```
 ai-librarian/
 ├── data/               # stores vector DB and uploaded files
@@ -24,13 +18,18 @@ ai-librarian/
 ├── static/             # .scss and .css files
 ├── src/
 │   ├── __init__.py
+│   ├── app.py          # webserver
 │   ├── config.py       # general config params
 │   ├── ingest.py       # loaders & splitters
 │   ├── vector.py       # database interface
 │   ├── rag.py          # actual rag/llm
-│   └── app.py          # webserver
+|   ├── metadata.py     # preprocessing documents
+|   ├── reset_db.py     # cleanup script for ChromaDB
+│   └── test_suite.py   # various tests for different modules  
 └── requirements.txt
 ```
+
+ ![Workflow](/img/basic_RAG.png)
 
 #### For Archlinux
 
