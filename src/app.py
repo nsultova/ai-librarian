@@ -1,21 +1,61 @@
-import shutil
+"""
+app.py — FastAPI web server for the AI Librarian.
+
+Request lifecycle:
+    GET  /          → renders the main page with library + filter state
+    POST /upload    → ingests a PDF or EPUB into the vector database
+    POST /search    → runs a RAG query and renders the answer
+
+All heavy work (file parsing, embedding, LLM calls) is dispatched to a
+thread pool via run_in_threadpool so the async event loop stays free to
+handle other requests during long-running ingestion or queries.
+"""
+
 import logging
+import shutil
 from pathlib import Path
-from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
+from typing import Any, Dict, List, Optional
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from typing import Optional, Dict, List, Any
+from contextlib import asynccontextmanager
 
-from src.config import UPLOAD_DIR
+from src.config import MAX_UPLOAD_BYTES, UPLOAD_DIR, ensure_dirs
 from src.ingest import chunk_file
-from src.vector import add_documents_to_db, get_vector_db
 from src.rag import query_library
+from src.vector import add_documents_to_db, get_vector_db
+
+
+
+# ---------------------------------------------------------------------------
+# Startup
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the application lifecycle.
+
+    Code before `yield` runs on startup (before first request).
+    Code after `yield` runs on shutdown (after last request).
+
+    Used here to create required data directories on startup.
+    Kept separate from config.py to avoid filesystem side effects
+    at import time — config.py may be imported by tests or CLI tools
+    that do not need directories created.
+    """
+    ensure_dirs()
+    yield
+    # shutdown logic would go here if needed
+
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="My Private Library")
-
+#app = FastAPI(title="AI Librarian")
+app = FastAPI(title="AI Librarian", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
@@ -24,62 +64,44 @@ templates = Jinja2Templates(directory="templates")
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_filter_options() -> Dict[str, List[str]]:
-    try:
-        db = get_vector_db()
-        result = db._collection.get(include=["metadatas"])
+def _get_library_state() -> Dict[str, Any]:
+    """
+    Single ChromaDB scan returning both the structured book list and
+    the available filter options for the search form.
 
-        if not result or not result["metadatas"]:
-            return {"authors": [], "file_types": [], "titles": []}
+    Called on every page render. Kept as one function (rather than two)
+    to avoid scanning the full collection twice per request — db.get()
+    fetches all stored metadata regardless of how much is read from it.
 
-        authors, file_types, titles = set(), set(), set()
-        for meta in result["metadatas"]:
-            if meta.get("author") and meta["author"] != "Unknown":
-                authors.add(meta["author"])
-            if meta.get("file_type"):
-                file_types.add(meta["file_type"])
-            if meta.get("title"):
-                titles.add(meta["title"])
-
-        return {
-            "authors": sorted(authors),
-            "file_types": sorted(file_types),
-            "titles": sorted(titles),
+    Returns:
+        {
+            "library":        list of book dicts sorted by title,
+            "filter_options": {"authors": [...], "file_types": [...]}
         }
-    except Exception as e:
-        logger.error(f"Failed to fetch filter options: {e}")
-        return {"authors": [], "file_types": [], "titles": []}
 
-
-def _aggregate_library() -> List[Dict[str, Any]]:
-    """
-    Build a structured book list from DB metadata.
-    Deduplicates by source_file, collects unique chapter titles per book.
-    Direct metadata query — no embedding/retrieval involved.
+    On any database error, returns empty defaults so the page still renders.
     """
     try:
-        db = get_vector_db()
-        result = db._collection.get(include=["metadatas"])
+        result = get_vector_db().get(include=["metadatas"])
+        metadatas = result.get("metadatas") or []
 
-        if not result or not result["metadatas"]:
-            return []
+        books: Dict[str, Dict] = {}
+        authors: set = set()
+        file_types: set = set()
 
-        books: Dict[str, Dict[str, Any]] = {}
-
-        for meta in result["metadatas"]:
+        for meta in metadatas:
+            # source_file is the deduplication key — title alone is
+            # unreliable because two files could share the same title.
             key = str(meta.get("source_file") or meta.get("title") or "unknown")
 
             if key not in books:
                 books[key] = {
-                    "title": meta.get("title", "Unknown"),
-                    "author": meta.get("author", "Unknown"),
-                    "file_type": meta.get("file_type", ""),
+                    "title":       meta.get("title", "Unknown"),
+                    "author":      meta.get("author", "Unknown"),
+                    "file_type":   meta.get("file_type", ""),
                     "source_file": meta.get("source_file", ""),
-                    "page_count": meta.get("page_count"),
-                    # "publisher": meta.get("publisher", ""),
-                    # "publication_date": meta.get("publication_date", ""),
-                    # "language": meta.get("language", ""),
-                    "chapters": set(),
+                    "page_count":  meta.get("page_count"),
+                    "chapters":    set(),
                     "chunk_count": 0,
                 }
 
@@ -88,14 +110,44 @@ def _aggregate_library() -> List[Dict[str, Any]]:
 
             books[key]["chunk_count"] += 1
 
-        for book in books.values():
+            if meta.get("author") and meta["author"] != "Unknown":
+                authors.add(meta["author"])
+            if meta.get("file_type"):
+                file_types.add(meta["file_type"])
+
+        book_list = sorted(books.values(), key=lambda b: b["title"].lower())
+        for book in book_list:
             book["chapters"] = sorted(book["chapters"])
 
-        return sorted(books.values(), key=lambda b: b["title"].lower())
+        return {
+            "library": book_list,
+            "filter_options": {
+                "authors":    sorted(authors),
+                "file_types": sorted(file_types),
+            },
+        }
 
     except Exception as e:
-        logger.error(f"Failed to aggregate library: {e}")
-        return []
+        logger.error(f"Failed to load library state: {e}")
+        return {
+            "library": [],
+            "filter_options": {"authors": [], "file_types": []},
+        }
+
+
+def _build_template_context(request: Request, state: Dict, **kwargs) -> Dict:
+    """
+    Build the base template context dict shared by all page-rendering routes.
+
+    Accepts extra keyword arguments merged in for route-specific values
+    (query, answer, sources, active_filters, prefill_title, prefill_chapter).
+    """
+    return {
+        "request":        request,
+        "library":        state["library"],
+        "filter_options": state["filter_options"],
+        **kwargs,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -105,115 +157,162 @@ def _aggregate_library() -> List[Dict[str, Any]]:
 @app.get("/", response_class=HTMLResponse)
 async def home(
     request: Request,
-    prefill_title: Optional[str] = None,
+    prefill_title:   Optional[str] = None,
     prefill_chapter: Optional[str] = None,
-):
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "filter_options": _get_filter_options(),
-            "library": _aggregate_library(),
-            "prefill_title": prefill_title,
-            "prefill_chapter": prefill_chapter,
-        },
+) -> HTMLResponse:
+    """
+    Render the main page.
+
+    prefill_title and prefill_chapter come from sidebar chapter links —
+    they pre-filter the search form so the user's next query is scoped
+    to that book/chapter without extra interaction.
+    """
+    state = await run_in_threadpool(_get_library_state)
+    context = _build_template_context(
+        request, state,
+        prefill_title=prefill_title,
+        prefill_chapter=prefill_chapter,
     )
+    return templates.TemplateResponse("index.html", context)
 
 
 @app.post("/upload", response_class=HTMLResponse)
-async def upload_file(request: Request, file: UploadFile = File(...)):
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+) -> HTMLResponse:
+    """
+    Ingest a PDF or EPUB into the vector database.
+
+    Pipeline:
+        1. Validate filename and file size
+        2. Save to disk (data/uploads/)
+        3. Parse, clean, and chunk the document  (run_in_threadpool)
+        4. Embed chunks and store in ChromaDB    (run_in_threadpool)
+        5. Re-render the main page with a status message
+
+    Steps 3 and 4 are dispatched to a thread pool because they are
+    synchronous and CPU/IO-heavy (embedding model inference can take
+    several minutes for large files). Running them directly in an async
+    handler would block the event loop and freeze all other requests.
+    """
     if not file.filename:
-        raise HTTPException(status_code=400, detail="No filename provided")
+        raise HTTPException(status_code=400, detail="No filename provided.")
 
     safe_name = Path(file.filename).name
     if not safe_name.lower().endswith((".pdf", ".epub")):
-        raise HTTPException(status_code=400, detail="Only PDF and EPUB files are supported")
+        raise HTTPException(status_code=400, detail="Only PDF and EPUB files are supported.")
+
+    # Read into memory once — used for size check and writing to disk.
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        max_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise HTTPException(status_code=413, detail=f"File exceeds the {max_mb}MB limit.")
 
     file_location = UPLOAD_DIR / safe_name
-    with open(file_location, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    with open(file_location, "wb") as f:
+        f.write(content)
 
-    chunks = chunk_file(str(file_location))
-    add_documents_to_db(chunks)
+    chunks = await run_in_threadpool(chunk_file, str(file_location))
+    await run_in_threadpool(add_documents_to_db, chunks)
 
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "message": f"Successfully ingested: {safe_name}",
-            "filter_options": _get_filter_options(),
-            "library": _aggregate_library(),
-            "prefill_title": None,
-            "prefill_chapter": None,
-        },
+    state = await run_in_threadpool(_get_library_state)
+    context = _build_template_context(
+        request, state,
+        message=f"Successfully ingested: {safe_name}",
+        prefill_title=None,
+        prefill_chapter=None,
     )
+    return templates.TemplateResponse("index.html", context)
 
 
 @app.post("/search", response_class=HTMLResponse)
 async def search(
     request: Request,
-    query: str = Form(...),
-    author: Optional[str] = Form(None),
-    file_type: Optional[str] = Form(None),
-    title: Optional[str] = Form(None),
-    chapter: Optional[str] = Form(None),
-):
-    filters = {}
-    if author and author != "all":
-        filters["author"] = author
-    if file_type and file_type != "all":
-        filters["file_type"] = file_type
-    if title and title != "all":
-        filters["title"] = title
-    if chapter and chapter.strip():
-        filters["chapter"] = chapter.strip()
+    query:     str            = Form(...),
+    author:    Optional[str]  = Form(None),
+    file_type: Optional[str]  = Form(None),
+    title:     Optional[str]  = Form(None),
+    chapter:   Optional[str]  = Form(None),
+) -> HTMLResponse:
+    """
+    Run a RAG query against the vector database and render the answer.
 
-    answer, sources = query_library(query, filters if filters else None)
+    Filter fields (author, file_type, title, chapter) narrow the ChromaDB
+    similarity search to chunks matching all provided values. "all" is the
+    sentinel value from the <select> dropdowns meaning no filter applied.
 
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "query": query,
-            "answer": answer,
-            "sources": sources,
-            "active_filters": filters,
-            "filter_options": _get_filter_options(),
-            "library": _aggregate_library(),
-            "prefill_title": title,
-            "prefill_chapter": chapter,
-        },
+    query_library() is dispatched to a thread pool because it is
+    synchronous — it calls the embedding model (to embed the query) and
+    the Ollama LLM (to generate the answer), both of which are blocking.
+    """
+    filters: Dict[str, str] = {}
+    if author    and author    != "all": filters["author"]    = author
+    if file_type and file_type != "all": filters["file_type"] = file_type
+    if title     and title     != "all": filters["title"]     = title
+    if chapter   and chapter.strip():    filters["chapter"]   = chapter.strip()
+
+    answer, sources = await run_in_threadpool(
+        query_library, query, filters or None
     )
 
+    state = await run_in_threadpool(_get_library_state)
+    context = _build_template_context(
+        request, state,
+        query=query,
+        answer=answer,
+        sources=sources,
+        active_filters=filters,
+        prefill_title=title,
+        prefill_chapter=chapter,
+    )
+    return templates.TemplateResponse("index.html", context)
+
 
 # ---------------------------------------------------------------------------
-# JSON / debug
+# JSON / debug endpoints
 # ---------------------------------------------------------------------------
-
-@app.get("/api/filters")
-async def get_available_filters():
-    return _get_filter_options()
-
 
 @app.get("/library")
-async def get_library():
-    return _aggregate_library()
+async def get_library() -> List[Dict]:
+    """Return the structured book list as JSON. Useful for debugging ingestion."""
+    state = await run_in_threadpool(_get_library_state)
+    return state["library"]
+
+
+@app.get("/api/filters")
+async def get_available_filters() -> Dict:
+    """Return available filter options as JSON."""
+    state = await run_in_threadpool(_get_library_state)
+    return state["filter_options"]
 
 
 @app.get("/debug/search")
-async def debug_search(q: str, k: int = 5):
+async def debug_search(q: str, k: int = 5) -> List[Dict]:
+    """
+    Run a raw similarity search and return chunk previews with metadata.
+    Use this to verify that retrieved chunks are semantically relevant
+    and that metadata (title, author, chapter) looks correct after ingestion.
+
+    Example:
+        curl "http://localhost:8000/debug/search?q=what+is+the+first+chapter+about"
+    """
     db = get_vector_db()
-    docs = db.similarity_search(q, k=k)
+    docs = await run_in_threadpool(db.similarity_search, q, k)
     return [
         {
-            "rank": i + 1,
+            "rank":     i + 1,
             "metadata": doc.metadata,
-            "preview": doc.page_content[:300],
-            "length": len(doc.page_content),
+            "preview":  doc.page_content[:300],
+            "length":   len(doc.page_content),
         }
         for i, doc in enumerate(docs)
     ]
 
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     import uvicorn

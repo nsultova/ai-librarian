@@ -1,13 +1,15 @@
-import os
 from pathlib import Path
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 UPLOAD_DIR = DATA_DIR / "uploads"
 DB_DIR = DATA_DIR / "chroma_db"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(DB_DIR, exist_ok=True)
+def ensure_dirs() -> None:
+    """Create required data directories if they do not exist."""
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    DB_DIR.mkdir(parents=True, exist_ok=True)
 
 # EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2" 
 # LLM_MODEL = "llama3.2" 
@@ -24,3 +26,4 @@ LLM_MODEL = "mistral:7b"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 RETRIEVAL_K = 5  # Number of chunks to retrieve
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
