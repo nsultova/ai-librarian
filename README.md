@@ -9,6 +9,12 @@ This is, for now, a mere POC to understand RAGs better. I want to turn it into s
 * ChromaDB
 * SSR w. jinja2
 
+**Models**
+* Embedding: https://huggingface.co/intfloat/e5-small-v2
+* LLM: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
+
+**!!!** If you change the embedding-model you NEED to reingest everything
+
 ##### Architecture
 
 ```
@@ -56,10 +62,30 @@ Setup uv (a nice tool to handle .venvs):
 #### RUN
 
 Always from the project root (`ai-librarian/`), never from inside `src/`:
-`
+
+```
 python -m src.app          # run the server
 python -m src.test_models  # run all tests
 python -m src.test_models rag  # run one test
+```
+
+
+#### Various tests
+
+`python -m src.test_models` - run all tests
+`python -m src.test_models rag`  - run one test
+
+
+`curl http://localhost:8000/library` — should show your books with chapters populated
+`curl "http://localhost:8000/debug/search?q=what+happens+in+the+first+chapter"` — inspect whether retrieved chunks are semantically relevant and whether metadata looks clean
+
+**Test UI-DEMO**
+Determine if it's your cache that must be cleaned or sth more serious
+
+`python -m http.server 8080`
+
+navigate to
+`http://127.0.0.1:8080/templates/preview.html`
 
 
 
@@ -87,30 +113,3 @@ python -m src.test_models rag  # run one test
 * add summarization of each book to metadata
 * add summarization of chapter to be dispalyed along choice
 * remove redundancy in UI (filters)
-
-
-##### MODELS USED
-
-Embedding: https://huggingface.co/intfloat/e5-small-v2
-LLM: https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3
-
-!!! If you change the embedding-model you NEED to reingest everything
-
-
-##### Various tests
-
-
-`python -m src.test_models` - run all tests
-`python -m src.test_models rag`  - run one test
-
-
-`curl http://localhost:8000/library` — should show your books with chapters populated
-`curl "http://localhost:8000/debug/search?q=what+happens+in+the+first+chapter"` — inspect whether retrieved chunks are semantically relevant and whether metadata looks clean
-
-**Test UI-DEMO**
-Determine if it's your cache that must be cleaned or sth more serious
-
-`python -m http.server 8080`
-
-navigate to
-`http://127.0.0.1:8080/templates/preview.html`
