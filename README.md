@@ -29,7 +29,7 @@ ai-librarian/
 └── requirements.txt
 ```
 
- ![Workflow](/img/basic_RAG.png)
+ ![Workflow](/img/basic_RAG_white_background.png)
 
 #### For Archlinux
 
