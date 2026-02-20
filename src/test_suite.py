@@ -51,7 +51,77 @@ def test_embedding_model():
         traceback.print_exc()
         return False
     
-    
+  
+def test_vector_db_singleton_and_reset():
+    """
+    Verifies two behaviors of the manual singleton in vector.py:
+
+    1. Singleton: get_vector_db() returns the same object on repeated calls.
+       This matters because the embedding model is expensive to load —
+       reloading it on every query would make the app unusable.
+
+    2. Reset invalidation: reset_database() clears the cached instance so
+       the next call to get_vector_db() constructs a fresh object.
+       Without this, reset_database() would leave a broken Chroma reference
+       pointing at a deleted collection.
+    """
+    print("=" * 60)
+    print("TESTING VECTOR DB SINGLETON AND RESET")
+    print("=" * 60)
+
+    try:
+        import src.vector as vector_module
+        from src.vector import get_vector_db, reset_database
+
+        # -- Part 1: singleton behavior --
+        print("\nPart 1: singleton")
+
+        db1 = get_vector_db()
+        db2 = get_vector_db()
+
+        assert db1 is db2, (
+            "get_vector_db() returned different objects on consecutive calls. "
+            "The singleton is not working — the embedding model would be "
+            "reloaded on every request."
+        )
+        print("  get_vector_db() returns the same instance on repeated calls")
+
+        # -- Part 2: reset invalidates the cache --
+        print("\nPart 2: reset invalidation")
+
+        reset_database()
+
+        assert vector_module._db_instance is None, (
+            "_db_instance was not set to None after reset_database(). "
+            "The next call to get_vector_db() would return a reference to "
+            "the deleted collection."
+        )
+        print("  _db_instance is None after reset_database()")
+
+        db3 = get_vector_db()
+
+        assert db3 is not None, (
+            "get_vector_db() returned None after reset. "
+            "Re-initialization failed."
+        )
+        assert db1 is not db3, (
+            "get_vector_db() returned the old instance after reset. "
+            "The cache was not properly invalidated."
+        )
+        print("  get_vector_db() returns a new instance after reset")
+
+        print("\nVECTOR DB SINGLETON AND RESET TEST PASSED")
+        return True
+
+    except AssertionError as e:
+        print(f"\nASSERTION FAILED: {e}")
+        return False
+    except Exception as e:
+        print(f"\nFAILED: {e}")
+        traceback.print_exc()
+        return False
+  
+  
 def test_rag_pipeline():
     print("=" * 60)
     print("TESTING RAG PIPELINE")
@@ -99,7 +169,6 @@ def test_rag_pipeline():
         print(f"\nFAILED: {e}")
         traceback.print_exc()
         return False
-
 
     
 def test_metadata_retrieval():
@@ -154,7 +223,8 @@ def test_metadata_retrieval():
 TESTS = {
     "embedding": test_embedding_model,
     "rag": test_rag_pipeline,
-    "metadata": test_metadata_retrieval
+    "metadata": test_metadata_retrieval,
+    "vector": test_vector_db_singleton_and_reset, 
 }
 
 
