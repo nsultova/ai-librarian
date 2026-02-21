@@ -1,7 +1,10 @@
 
 ##### Disclaimer
 
-This is, for now, a mere POC to understand RAGs better. I want to turn it into sth proper tho, as I could actually use such a tool pretty much.
+This is, for now, a mere proof-of-concept tinkering with RAG building my own personal librarian - a delightful idea for a notorious but equally forgetful bookworm :D
+I want to turn it into sth proper tho, as I could actually use such a tool pretty much.
+
+It is not production-ready (yet). 
 
 ###### Techstack
 * langchain
