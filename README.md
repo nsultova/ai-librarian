@@ -43,10 +43,13 @@ ai-librarian/
 
 #### For Archlinux
 
-Setup uv (a nice tool to handle .venvs):
-`uv venv ai-librarian-env`
-`source ./ai-librarian-env/bin/activate`
-`uv pip install -r reqirements.txt`
+Set up virtual environment with uv
+
+```
+uv venv ai-librarian-env
+source ./ai-librarian-env/bin/activate
+uv pip install -e .
+```
 
 **Note:** Install ollama systemwide
 `sudo pacman -S ollama`
