@@ -119,3 +119,4 @@ navigate to
 * add summarization of each book to metadata
 * add summarization of chapter to be dispalyed along choice
 * remove redundancy in UI (filters)
+* Do reasonable delete fuction for chromaDB entries and/or full db delete
