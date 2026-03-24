@@ -46,12 +46,11 @@ ai-librarian/
 
 #### For Archlinux
 
-Set up virtual environment with uv
+Environments are managed via uv
 
 ```
-uv venv ai-librarian-env
-source ./ai-librarian-env/bin/activate
-uv pip install -e .
+source .venv/bin/activate
+uv sync
 ```
 
 **Note:** Install ollama systemwide
